@@ -2,6 +2,8 @@ import { useState } from "react";
 import { X, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const REGISTER_URL = "https://functions.poehali.dev/0300ad13-eaa5-497d-8128-f65bcf96da2a";
+
 interface RegisterModalProps {
   onClose: () => void;
 }
@@ -10,9 +12,33 @@ const RegisterModal = ({ onClose }: RegisterModalProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "", game: "" });
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    const res = await fetch(REGISTER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.name,
+        email: form.email,
+        password: form.password,
+        favorite_game: form.game,
+      }),
+    });
+
+    const data = await res.json();
+    setLoading(false);
+
+    if (!res.ok || !data.success) {
+      setError(data.error || "Ошибка регистрации. Попробуй ещё раз.");
+      return;
+    }
+
     setSubmitted(true);
   };
 
@@ -80,8 +106,15 @@ const RegisterModal = ({ onClose }: RegisterModalProps) => {
                     className="w-full bg-[#202225] border border-[#202225] focus:border-[#5865f2] text-white placeholder-[#72767d] rounded px-3 py-2.5 text-sm outline-none transition-colors"
                   />
                 </div>
-                <Button type="submit" className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white py-2.5 rounded font-medium mt-2">
-                  Зарегистрироваться
+
+                {error && (
+                  <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded px-3 py-2">
+                    {error}
+                  </div>
+                )}
+
+                <Button type="submit" disabled={loading} className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white py-2.5 rounded font-medium mt-2 disabled:opacity-60">
+                  {loading ? "Регистрируем..." : "Зарегистрироваться"}
                 </Button>
                 <p className="text-[#72767d] text-xs text-center">
                   Уже есть аккаунт?{" "}
