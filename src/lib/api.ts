@@ -2,7 +2,7 @@ const BASE = "https://functions.poehali.dev/b1a16ec3-c9d7-4e46-bb90-e30137e5c534
 
 function headers(token?: string | null) {
   const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) h["Authorization"] = `Bearer ${token}`;
+  if (token) h["X-Authorization"] = `Bearer ${token}`;
   return h;
 }
 
