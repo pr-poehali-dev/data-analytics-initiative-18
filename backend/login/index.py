@@ -92,9 +92,9 @@ def handler(event: dict, context) -> dict:
     else:
         valid = (sha256_hash == password_hash)
         if valid:
-            # Мигрируем хеш на bcrypt
+            # Мигрируем хеш на bcrypt — используем %s, bcrypt содержит спецсимволы
             new_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-            cur.execute(f"UPDATE {schema}.users SET password_hash='{new_hash}' WHERE id={user_id}")
+            cur.execute(f"UPDATE {schema}.users SET password_hash=%s WHERE id={user_id}", (new_hash,))
 
     if not valid:
         log_error(cur, schema, 'login', 'Wrong password', ip=ip, user_id=user_id)

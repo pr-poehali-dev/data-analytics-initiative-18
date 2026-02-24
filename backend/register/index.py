@@ -93,9 +93,11 @@ def handler(event: dict, context) -> dict:
         return {'statusCode': 409, 'headers': {'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'error': 'Пользователь с таким email или никнеймом уже существует'})}
 
+    # Хеш передаём через %s — bcrypt содержит спецсимволы, f-string сломает SQL
     cur.execute(
         f"INSERT INTO {schema}.users (username, email, password_hash, favorite_game) "
-        f"VALUES ('{safe_user}', '{safe_email}', '{password_hash}', '{safe_game}') RETURNING id"
+        f"VALUES ('{safe_user}', '{safe_email}', %s, '{safe_game}') RETURNING id",
+        (password_hash,)
     )
     user_id = cur.fetchone()[0]
     conn.commit()
