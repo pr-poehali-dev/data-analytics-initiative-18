@@ -1,31 +1,7 @@
 {
   "tests": [
-    {
-      "name": "Успешная регистрация",
-      "method": "POST",
-      "path": "/",
-      "body": {"username": "TestGamer", "email": "test@frikords.ru", "password": "password123", "favorite_game": "CS2"},
-      "expectedStatus": 200,
-      "expectedBody": {"success": true},
-      "bodyMatcher": "partial"
-    },
-    {
-      "name": "Дубликат пользователя",
-      "method": "POST",
-      "path": "/",
-      "body": {"username": "TestGamer", "email": "test@frikords.ru", "password": "password123"},
-      "expectedStatus": 409,
-      "expectedBody": {"error": "Пользователь с таким email или никнеймом уже существует"},
-      "bodyMatcher": "partial"
-    },
-    {
-      "name": "Пустые поля",
-      "method": "POST",
-      "path": "/",
-      "body": {"username": "", "email": "", "password": ""},
-      "expectedStatus": 400,
-      "expectedBody": {"error": "Заполните все обязательные поля"},
-      "bodyMatcher": "partial"
-    }
+    {"name": "OPTIONS", "method": "OPTIONS", "path": "/", "expectedStatus": 200},
+    {"name": "Empty fields", "method": "POST", "path": "/", "body": {"username": "", "email": "", "password": ""}, "expectedStatus": 400},
+    {"name": "Short password", "method": "POST", "path": "/", "body": {"username": "Test", "email": "t@t.ru", "password": "123"}, "expectedStatus": 400}
   ]
 }

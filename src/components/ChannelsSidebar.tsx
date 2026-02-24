@@ -1,6 +1,8 @@
-import { ArrowRight, Hash, Mic, Settings, X, LogOut } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowRight, Hash, LogOut, Plus, X, Copy, Check, Link } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { User } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
 
 const CHANNELS = [
   { id: "general", label: "общий" },
@@ -10,43 +12,109 @@ const CHANNELS = [
 ];
 
 function getAvatarColor(username: string) {
-  const colors = [
-    "from-purple-500 to-pink-500",
-    "from-green-500 to-blue-500",
-    "from-orange-500 to-red-500",
-    "from-cyan-500 to-blue-500",
-    "from-yellow-500 to-orange-500",
-    "from-[#5865f2] to-[#7c3aed]",
-  ];
+  const colors = ["from-purple-500 to-pink-500", "from-green-500 to-blue-500", "from-orange-500 to-red-500", "from-[#5865f2] to-[#7c3aed]"];
   let hash = 0;
   for (let i = 0; i < username.length; i++) hash = username.charCodeAt(i) + ((hash << 5) - hash);
   return colors[Math.abs(hash) % colors.length];
 }
 
+interface Room { id: number; name: string; description: string; members: number; invite_code?: string; }
+
 interface ChannelsSidebarProps {
   mobileSidebarOpen: boolean;
   onClose: () => void;
   activeChannel: string;
+  activeRoomId?: number;
   onChannelChange: (channel: string) => void;
+  onRoomChange: (roomId: number, roomName: string) => void;
   user: User | null;
+  token: string | null;
   onLogout: () => void;
+  onAdminClick?: () => void;
 }
 
-const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, onChannelChange, user, onLogout }: ChannelsSidebarProps) => {
+const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoomId, onChannelChange, onRoomChange, user, token, onLogout, onAdminClick }: ChannelsSidebarProps) => {
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
+  const [newRoomName, setNewRoomName] = useState("");
+  const [newRoomDesc, setNewRoomDesc] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
+
+  const loadRooms = async () => {
+    const data = await api.rooms.list();
+    if (data.rooms) setRooms(data.rooms);
+  };
+
+  useEffect(() => { loadRooms(); }, []);
+
+  const createRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !newRoomName.trim()) return;
+    setCreating(true);
+    setError("");
+    const data = await api.rooms.create(token, newRoomName.trim(), newRoomDesc.trim(), true);
+    setCreating(false);
+    if (data.room) {
+      setRooms(prev => [data.room, ...prev]);
+      setShowCreate(false);
+      setNewRoomName("");
+      setNewRoomDesc("");
+      onRoomChange(data.room.id, data.room.name);
+      onClose();
+    } else {
+      setError(data.error || "Ошибка создания");
+    }
+  };
+
+  const joinRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !inviteCode.trim()) return;
+    setJoining(true);
+    setError("");
+    const data = await api.rooms.join(token, inviteCode.trim());
+    setJoining(false);
+    if (data.ok) {
+      setShowJoin(false);
+      setInviteCode("");
+      loadRooms();
+      onRoomChange(data.room_id, data.room_name);
+      onClose();
+    } else {
+      setError(data.error || "Ошибка вступления");
+    }
+  };
+
+  const copyCode = async (code: string) => {
+    await navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const getNewInvite = async (roomId: number) => {
+    if (!token) return;
+    const data = await api.rooms.createInvite(token, roomId);
+    if (data.invite_code) {
+      setRooms(prev => prev.map(r => r.id === roomId ? { ...r, invite_code: data.invite_code } : r));
+    }
+  };
+
   return (
     <div className={`${mobileSidebarOpen ? "flex" : "hidden"} lg:flex w-full lg:w-60 bg-[#2f3136] flex-col`}>
-      <div className="p-4 border-b border-[#202225] flex items-center justify-between">
-        <h2 className="text-white font-semibold text-base">Frikords</h2>
-        <Button
-          variant="ghost"
-          className="lg:hidden text-[#b9bbbe] hover:text-white hover:bg-[#40444b] p-1"
-          onClick={onClose}
-        >
+      <div className="p-4 border-b border-[#202225] flex items-center justify-between flex-shrink-0">
+        <h2 className="text-white font-semibold">Frikords</h2>
+        <Button variant="ghost" className="lg:hidden text-[#b9bbbe] hover:text-white hover:bg-[#40444b] p-1" onClick={onClose}>
           <X className="w-4 h-4" />
         </Button>
       </div>
-      <div className="flex-1 p-2">
-        <div className="mb-4">
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {/* Глобальные каналы */}
+        <div className="mb-3">
           <div className="flex items-center gap-1 px-2 py-1 text-[#8e9297] text-xs font-semibold uppercase tracking-wide">
             <ArrowRight className="w-3 h-3" />
             <span>Каналы</span>
@@ -56,10 +124,8 @@ const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, onChannelC
               <div
                 key={ch.id}
                 onClick={() => { onChannelChange(ch.id); onClose(); }}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer transition-colors ${
-                  activeChannel === ch.id
-                    ? "bg-[#393c43] text-[#dcddde]"
-                    : "text-[#8e9297] hover:text-[#dcddde] hover:bg-[#393c43]"
+                className={`flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                  !activeRoomId && activeChannel === ch.id ? "bg-[#393c43] text-white" : "text-[#8e9297] hover:text-white hover:bg-[#393c43]"
                 }`}
               >
                 <Hash className="w-4 h-4" />
@@ -68,60 +134,142 @@ const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, onChannelC
             ))}
           </div>
         </div>
+
+        {/* Комнаты */}
         <div>
-          <div className="flex items-center gap-1 px-2 py-1 text-[#8e9297] text-xs font-semibold uppercase tracking-wide">
-            <ArrowRight className="w-3 h-3" />
-            <span>Голосовые</span>
+          <div className="flex items-center justify-between px-2 py-1">
+            <div className="flex items-center gap-1 text-[#8e9297] text-xs font-semibold uppercase tracking-wide">
+              <ArrowRight className="w-3 h-3" />
+              <span>Комнаты</span>
+            </div>
+            {user && (
+              <div className="flex gap-1">
+                <button onClick={() => { setShowJoin(true); setShowCreate(false); setError(""); }} className="text-[#8e9297] hover:text-white p-0.5" title="Вступить по инвайту">
+                  <Link className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => { setShowCreate(true); setShowJoin(false); setError(""); }} className="text-[#8e9297] hover:text-white p-0.5" title="Создать комнату">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Форма создания */}
+          {showCreate && (
+            <form onSubmit={createRoom} className="mx-2 mt-1 mb-2 p-2 bg-[#36393f] rounded border border-[#202225]">
+              <input
+                value={newRoomName}
+                onChange={e => setNewRoomName(e.target.value)}
+                placeholder="Название комнаты"
+                className="w-full bg-[#202225] text-white placeholder-[#72767d] rounded px-2 py-1.5 text-xs outline-none mb-1.5"
+                required
+              />
+              <input
+                value={newRoomDesc}
+                onChange={e => setNewRoomDesc(e.target.value)}
+                placeholder="Описание (необязательно)"
+                className="w-full bg-[#202225] text-white placeholder-[#72767d] rounded px-2 py-1.5 text-xs outline-none mb-1.5"
+              />
+              {error && <div className="text-red-400 text-xs mb-1.5">{error}</div>}
+              <div className="flex gap-1">
+                <Button type="submit" disabled={creating} size="sm" className="flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs py-1 h-auto">
+                  {creating ? "..." : "Создать"}
+                </Button>
+                <Button type="button" size="sm" variant="ghost" className="text-[#8e9297] hover:text-white text-xs py-1 h-auto" onClick={() => setShowCreate(false)}>
+                  Отмена
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {/* Форма вступления */}
+          {showJoin && (
+            <form onSubmit={joinRoom} className="mx-2 mt-1 mb-2 p-2 bg-[#36393f] rounded border border-[#202225]">
+              <input
+                value={inviteCode}
+                onChange={e => setInviteCode(e.target.value)}
+                placeholder="Код инвайта"
+                className="w-full bg-[#202225] text-white placeholder-[#72767d] rounded px-2 py-1.5 text-xs outline-none mb-1.5"
+                required
+              />
+              {error && <div className="text-red-400 text-xs mb-1.5">{error}</div>}
+              <div className="flex gap-1">
+                <Button type="submit" disabled={joining} size="sm" className="flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs py-1 h-auto">
+                  {joining ? "..." : "Вступить"}
+                </Button>
+                <Button type="button" size="sm" variant="ghost" className="text-[#8e9297] hover:text-white text-xs py-1 h-auto" onClick={() => setShowJoin(false)}>
+                  Отмена
+                </Button>
+              </div>
+            </form>
+          )}
+
           <div className="mt-1 space-y-0.5">
-            {["Общий лобби", "Ranked Squad"].map((ch) => (
-              <div
-                key={ch}
-                className="flex items-center gap-1.5 px-2 py-1 rounded text-[#8e9297] hover:text-[#dcddde] hover:bg-[#393c43] cursor-pointer"
-              >
-                <Mic className="w-4 h-4" />
-                <span className="text-sm">{ch}</span>
+            {rooms.map((room) => (
+              <div key={room.id}>
+                <div
+                  onClick={() => { onRoomChange(room.id, room.name); onClose(); }}
+                  className={`flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-colors group ${
+                    activeRoomId === room.id ? "bg-[#393c43] text-white" : "text-[#8e9297] hover:text-white hover:bg-[#393c43]"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Hash className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-sm truncate">{room.name}</span>
+                  </div>
+                  <span className="text-xs text-[#72767d] ml-1 flex-shrink-0">{room.members}</span>
+                </div>
+                {activeRoomId === room.id && user && (
+                  <div className="px-2 pb-1">
+                    {room.invite_code ? (
+                      <div className="flex items-center gap-1 bg-[#202225] rounded px-2 py-1 text-xs">
+                        <span className="text-[#72767d] truncate flex-1">{room.invite_code}</span>
+                        <button onClick={() => copyCode(room.invite_code!)} className="text-[#8e9297] hover:text-white flex-shrink-0">
+                          {copiedCode === room.invite_code ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => getNewInvite(room.id)} className="text-[#5865f2] text-xs hover:underline flex items-center gap-1">
+                        <Link className="w-3 h-3" /> Создать инвайт
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
+            {rooms.length === 0 && !showCreate && (
+              <div className="text-[#72767d] text-xs px-2 py-2">
+                {user ? "Нет публичных комнат. Создай первую!" : "Войди, чтобы создавать комнаты"}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Профиль пользователя */}
-      <div className="p-2 bg-[#292b2f] flex items-center gap-2">
+      {/* Профиль */}
+      <div className="p-2 bg-[#292b2f] flex items-center gap-2 flex-shrink-0">
         {user ? (
           <>
             <div className={`w-8 h-8 bg-gradient-to-r ${getAvatarColor(user.username)} rounded-full flex items-center justify-center flex-shrink-0`}>
-              <span className="text-white text-sm font-medium">{user.username[0].toUpperCase()}</span>
+              <span className="text-white text-sm font-semibold">{user.username[0].toUpperCase()}</span>
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-white text-sm font-medium truncate">{user.username}</div>
-              {user.favorite_game && (
-                <div className="text-[#b9bbbe] text-xs truncate">🎮 {user.favorite_game}</div>
-              )}
+              {user.favorite_game && <div className="text-[#72767d] text-xs truncate">{user.favorite_game}</div>}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-8 h-8 p-0 hover:bg-[#40444b]"
-              onClick={onLogout}
-              title="Выйти"
-            >
-              <LogOut className="w-4 h-4 text-[#b9bbbe]" />
-            </Button>
+            <div className="flex gap-0.5">
+              {user.is_admin && (
+                <Button variant="ghost" size="sm" className="w-7 h-7 p-0 hover:bg-[#40444b] text-[#faa61a]" onClick={onAdminClick} title="Админ-панель">
+                  <span className="text-xs font-bold">A</span>
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" className="w-7 h-7 p-0 hover:bg-[#40444b]" onClick={onLogout} title="Выйти">
+                <LogOut className="w-4 h-4 text-[#b9bbbe]" />
+              </Button>
+            </div>
           </>
         ) : (
-          <>
-            <div className="w-8 h-8 bg-[#40444b] rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-[#8e9297] text-sm">?</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[#8e9297] text-sm truncate">Гость</div>
-            </div>
-            <Button variant="ghost" size="sm" className="w-8 h-8 p-0 hover:bg-[#40444b]">
-              <Settings className="w-4 h-4 text-[#b9bbbe]" />
-            </Button>
-          </>
+          <div className="text-[#72767d] text-xs px-1">Не авторизован</div>
         )}
       </div>
     </div>

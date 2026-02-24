@@ -5,66 +5,69 @@ import ChannelsSidebar from "@/components/ChannelsSidebar";
 import ChatArea from "@/components/ChatArea";
 import RegisterModal from "@/components/RegisterModal";
 import LoginModal from "@/components/LoginModal";
+import AdminPanel from "@/components/AdminPanel";
 import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
-  const { user, token, login, logout, isLoggedIn } = useAuth();
+  const { user, token, login, logout } = useAuth();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showRegModal, setShowRegModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [activeChannel, setActiveChannel] = useState("general");
+  const [activeRoomId, setActiveRoomId] = useState<number | undefined>();
+  const [activeRoomName, setActiveRoomName] = useState<string | undefined>();
+
+  const handleChannelChange = (channel: string) => {
+    setActiveChannel(channel);
+    setActiveRoomId(undefined);
+    setActiveRoomName(undefined);
+  };
+
+  const handleRoomChange = (roomId: number, roomName: string) => {
+    setActiveRoomId(roomId);
+    setActiveRoomName(roomName);
+  };
 
   return (
-    <div className="min-h-screen bg-[#36393f] text-white overflow-x-hidden flex flex-col">
-      {showRegModal && (
-        <RegisterModal onClose={() => setShowRegModal(false)} />
-      )}
+    <div className="h-screen bg-[#36393f] text-white flex flex-col overflow-hidden">
+      {showRegModal && <RegisterModal onClose={() => setShowRegModal(false)} />}
       {showLoginModal && (
-        <LoginModal
-          onClose={() => setShowLoginModal(false)}
-          onSuccess={login}
-          onRegisterClick={() => setShowRegModal(true)}
-        />
+        <LoginModal onClose={() => setShowLoginModal(false)} onSuccess={login} onRegisterClick={() => setShowRegModal(true)} />
       )}
+      {showAdmin && token && <AdminPanel token={token} onClose={() => setShowAdmin(false)} />}
 
-      <Navbar
-        onRegisterClick={() => setShowRegModal(true)}
-        onLoginClick={() => setShowLoginModal(true)}
-        user={user}
-      />
+      <Navbar onRegisterClick={() => setShowRegModal(true)} onLoginClick={() => setShowLoginModal(true)} user={user} />
 
-      <div className="flex flex-1">
-        {/* Боковая панель серверов */}
-        <div className="hidden lg:flex w-[72px] bg-[#202225] flex-col items-center py-3 gap-2">
-          <div className="w-12 h-12 bg-[#5865f2] rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer">
+      <div className="flex flex-1 min-h-0">
+        <div className="hidden lg:flex w-[72px] bg-[#202225] flex-col items-center py-3 gap-2 flex-shrink-0">
+          <div className="w-12 h-12 bg-[#5865f2] rounded-2xl flex items-center justify-center">
             <Gamepad2 className="w-6 h-6 text-white" />
           </div>
           <div className="w-8 h-[2px] bg-[#36393f] rounded-full"></div>
-          {["🎮", "🏆", "⚔️", "🔥"].map((emoji, i) => (
-            <div
-              key={i}
-              className="w-12 h-12 bg-[#36393f] rounded-3xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer hover:bg-[#5865f2] text-lg"
-            >
-              {emoji}
-            </div>
-          ))}
         </div>
 
-        <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+        <div className="flex-1 flex flex-col lg:flex-row min-w-0">
           <ChannelsSidebar
             mobileSidebarOpen={mobileSidebarOpen}
             onClose={() => setMobileSidebarOpen(false)}
             activeChannel={activeChannel}
-            onChannelChange={setActiveChannel}
+            activeRoomId={activeRoomId}
+            onChannelChange={handleChannelChange}
+            onRoomChange={handleRoomChange}
             user={user}
+            token={token}
             onLogout={logout}
+            onAdminClick={() => setShowAdmin(true)}
           />
           <ChatArea
             onSidebarOpen={() => setMobileSidebarOpen(true)}
-            onRegisterClick={() => { setShowRegModal(true); }}
+            onRegisterClick={() => setShowLoginModal(true)}
             user={user}
             token={token}
             channel={activeChannel}
+            roomId={activeRoomId}
+            roomName={activeRoomName}
           />
         </div>
       </div>

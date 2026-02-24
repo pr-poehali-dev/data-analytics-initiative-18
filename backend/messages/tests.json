@@ -1,23 +1,12 @@
 {
   "tests": [
-    {
-      "name": "OPTIONS preflight",
-      "method": "OPTIONS",
-      "path": "/",
-      "expectedStatus": 200
-    },
-    {
-      "name": "Get messages",
-      "method": "GET",
-      "path": "/?channel=general",
-      "expectedStatus": 200
-    },
-    {
-      "name": "Send message without token",
-      "method": "POST",
-      "path": "/",
-      "body": {"content": "Hello", "channel": "general"},
-      "expectedStatus": 401
-    }
+    {"name": "OPTIONS", "method": "OPTIONS", "path": "/", "expectedStatus": 200},
+    {"name": "Get messages", "method": "GET", "path": "/?action=messages", "expectedStatus": 200},
+    {"name": "Send no auth", "method": "POST", "path": "/?action=messages", "body": {"content": "Hi"}, "expectedStatus": 401},
+    {"name": "Get rooms", "method": "GET", "path": "/?action=rooms", "expectedStatus": 200},
+    {"name": "Create room no auth", "method": "POST", "path": "/?action=rooms", "body": {"name": "test"}, "expectedStatus": 401},
+    {"name": "Join no auth no code", "method": "POST", "path": "/?action=join", "expectedStatus": 401},
+    {"name": "Invite no auth", "method": "POST", "path": "/?action=invite", "expectedStatus": 401},
+    {"name": "Create invite no auth", "method": "POST", "path": "/?action=invite&room_id=1", "expectedStatus": 401}
   ]
 }

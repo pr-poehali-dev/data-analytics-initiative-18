@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export interface User {
   id: number;
   username: string;
   favorite_game: string;
+  is_admin: boolean;
 }
 
 const TOKEN_KEY = "frikords_token";
