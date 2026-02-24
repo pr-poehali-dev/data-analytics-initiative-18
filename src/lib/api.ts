@@ -7,16 +7,25 @@ function headers(method: string, token?: string | null) {
   return h;
 }
 
-async function req(action: string, method: string, token?: string | null, body?: object, extra?: Record<string, string>) {
+ 
+async function req(action: string, method: string, token?: string | null, body?: object, extra?: Record<string, string>, attempt = 0): Promise<Record<string, unknown>> {
   const params = new URLSearchParams({ action, ...extra });
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(`${BASE}?${params}`, {
       method,
       headers: headers(method, token),
       body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     return res.json();
   } catch {
+    if (attempt < 2) {
+      await new Promise(r => setTimeout(r, 1000));
+      return req(action, method, token, body, extra, attempt + 1);
+    }
     return { error: "Нет соединения с сервером" };
   }
 }
