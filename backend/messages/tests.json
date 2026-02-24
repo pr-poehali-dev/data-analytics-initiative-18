@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Get messages",
+      "method": "GET",
+      "path": "/?channel=general",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Send message without token",
+      "method": "POST",
+      "path": "/",
+      "body": {"content": "Hello", "channel": "general"},
+      "expectedStatus": 401
+    }
+  ]
+}
