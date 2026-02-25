@@ -282,4 +282,105 @@ def handler(event: dict, context) -> dict:
         users = [{'username': r[0], 'favorite_game': r[1] or ''} for r in rows]
         return resp(200, {'online': len(users), 'users': users})
 
+    # ─── FRIENDS ─────────────────────────────────────────────
+
+    if action == 'friends':
+        user = get_user(cur, schema, token)
+        if not user: return err(401, 'Необходима авторизация')
+        uid = user[0]
+
+        if method == 'GET':
+            sub = params.get('sub', 'list')
+            if sub == 'list':
+                cur.execute(
+                    f"SELECT u.id, u.username, u.favorite_game FROM {schema}.friend_requests fr "
+                    f"JOIN {schema}.users u ON u.id = CASE WHEN fr.from_user_id={uid} THEN fr.to_user_id ELSE fr.from_user_id END "
+                    f"WHERE (fr.from_user_id={uid} OR fr.to_user_id={uid}) AND fr.status='accepted' AND u.is_banned=FALSE"
+                )
+                friends = [{'id':r[0],'username':r[1],'favorite_game':r[2] or ''} for r in cur.fetchall()]
+                return resp(200, {'friends': friends})
+            if sub == 'requests':
+                cur.execute(
+                    f"SELECT fr.id, u.id, u.username, u.favorite_game, fr.created_at FROM {schema}.friend_requests fr "
+                    f"JOIN {schema}.users u ON u.id=fr.from_user_id "
+                    f"WHERE fr.to_user_id={uid} AND fr.status='pending' AND u.is_banned=FALSE "
+                    f"ORDER BY fr.created_at DESC"
+                )
+                reqs = [{'request_id':r[0],'user_id':r[1],'username':r[2],'favorite_game':r[3] or '','created_at':str(r[4])} for r in cur.fetchall()]
+                return resp(200, {'requests': reqs})
+
+        if method == 'POST':
+            sub = body.get('sub', '')
+            if sub == 'send':
+                to_username = sanitize(body.get('username') or '').replace("'","''")
+                if not to_username: return err(400, 'Укажи username')
+                cur.execute(f"SELECT id FROM {schema}.users WHERE username='{to_username}' AND is_banned=FALSE")
+                row = cur.fetchone()
+                if not row: return err(404, 'Пользователь не найден')
+                to_id = row[0]
+                if to_id == uid: return err(400, 'Нельзя добавить себя')
+                cur.execute(f"SELECT id,status FROM {schema}.friend_requests WHERE (from_user_id={uid} AND to_user_id={to_id}) OR (from_user_id={to_id} AND to_user_id={uid})")
+                existing = cur.fetchone()
+                if existing:
+                    if existing[1] == 'accepted': return err(409, 'Уже друзья')
+                    if existing[1] == 'pending': return err(409, 'Запрос уже отправлен')
+                cur.execute(f"INSERT INTO {schema}.friend_requests(from_user_id,to_user_id,status) VALUES({uid},{to_id},'pending')")
+                return resp(200, {'ok': True})
+
+            if sub == 'accept':
+                req_id = int(body.get('request_id', 0))
+                cur.execute(f"SELECT id FROM {schema}.friend_requests WHERE id={req_id} AND to_user_id={uid} AND status='pending'")
+                if not cur.fetchone(): return err(404, 'Запрос не найден')
+                cur.execute(f"UPDATE {schema}.friend_requests SET status='accepted' WHERE id={req_id}")
+                return resp(200, {'ok': True})
+
+            if sub == 'decline':
+                req_id = int(body.get('request_id', 0))
+                cur.execute(f"UPDATE {schema}.friend_requests SET status='declined' WHERE id={req_id} AND to_user_id={uid}")
+                return resp(200, {'ok': True})
+
+    # ─── DIRECT MESSAGES ─────────────────────────────────────
+
+    if action == 'dm':
+        user = get_user(cur, schema, token)
+        if not user: return err(401, 'Необходима авторизация')
+        uid = user[0]
+
+        if method == 'GET':
+            other_id_str = params.get('with', '')
+            if not str(other_id_str).isdigit(): return err(400, 'Укажи with=user_id')
+            other_id = int(other_id_str)
+            cur.execute(
+                f"SELECT 1 FROM {schema}.friend_requests "
+                f"WHERE ((from_user_id={uid} AND to_user_id={other_id}) OR (from_user_id={other_id} AND to_user_id={uid})) "
+                f"AND status='accepted'"
+            )
+            if not cur.fetchone(): return err(403, 'Не друзья')
+            cur.execute(f"UPDATE {schema}.users SET last_seen=now() WHERE id={uid}")
+            cur.execute(
+                f"SELECT dm.id, dm.content, dm.created_at, u.username FROM {schema}.direct_messages dm "
+                f"JOIN {schema}.users u ON u.id=dm.sender_id "
+                f"WHERE (dm.sender_id={uid} AND dm.receiver_id={other_id}) OR (dm.sender_id={other_id} AND dm.receiver_id={uid}) "
+                f"ORDER BY dm.created_at ASC LIMIT 100"
+            )
+            msgs = [{'id':r[0],'content':r[1],'created_at':str(r[2]),'username':r[3]} for r in cur.fetchall()]
+            return resp(200, {'messages': msgs})
+
+        if method == 'POST':
+            other_id = int(body.get('to', 0))
+            content = sanitize(body.get('content') or '')
+            if not content: return err(400, 'Пустое сообщение')
+            if len(content) > 2000: return err(400, 'Максимум 2000 символов')
+            if rate_limit(cur, schema, f'dm:{uid}', 10, 10): return err(429, 'Слишком быстро')
+            cur.execute(
+                f"SELECT 1 FROM {schema}.friend_requests "
+                f"WHERE ((from_user_id={uid} AND to_user_id={other_id}) OR (from_user_id={other_id} AND to_user_id={uid})) "
+                f"AND status='accepted'"
+            )
+            if not cur.fetchone(): return err(403, 'Не друзья')
+            sc = content.replace("'","''")
+            cur.execute(f"INSERT INTO {schema}.direct_messages(sender_id,receiver_id,content) VALUES({uid},{other_id},'{sc}') RETURNING id,created_at")
+            msg_id, created_at = cur.fetchone()
+            return resp(200, {'ok':True,'message':{'id':msg_id,'content':content,'created_at':str(created_at),'username':user[1]}})
+
     return err(404, 'Not found')

@@ -1,0 +1,364 @@
+import { useState, useEffect, useRef } from "react";
+import { User } from "@/hooks/useAuth";
+import Icon from "@/components/ui/icon";
+
+const BASE = "https://functions.poehali.dev/b1a16ec3-c9d7-4e46-bb90-e30137e5c534";
+
+function authHeaders(token: string) {
+  return { "Content-Type": "application/json", "X-Authorization": `Bearer ${token}` };
+}
+
+async function apiFriends(sub: string, token: string) {
+  const res = await fetch(`${BASE}?action=friends&sub=${sub}`, { headers: authHeaders(token) });
+  return res.json();
+}
+
+async function apiSendFriendReq(username: string, token: string) {
+  const res = await fetch(`${BASE}?action=friends`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ sub: "send", username }),
+  });
+  return res.json();
+}
+
+async function apiRespondReq(request_id: number, accept: boolean, token: string) {
+  const res = await fetch(`${BASE}?action=friends`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ sub: accept ? "accept" : "decline", request_id }),
+  });
+  return res.json();
+}
+
+async function apiGetDM(withId: number, token: string) {
+  const res = await fetch(`${BASE}?action=dm&with=${withId}`, { headers: authHeaders(token) });
+  return res.json();
+}
+
+async function apiSendDM(toId: number, content: string, token: string) {
+  const res = await fetch(`${BASE}?action=dm`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ to: toId, content }),
+  });
+  return res.json();
+}
+
+interface Friend { id: number; username: string; favorite_game: string; }
+interface FriendRequest { request_id: number; user_id: number; username: string; favorite_game: string; }
+interface DMessage { id: number; content: string; created_at: string; username: string; }
+
+function avatarColor(name: string) {
+  const colors = ["#5865f2","#eb459e","#ed4245","#fee75c","#57f287","#1abc9c","#3498db","#e91e63"];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return colors[Math.abs(h) % colors.length];
+}
+
+interface Props {
+  user: User;
+  token: string;
+  onClose: () => void;
+}
+
+type Tab = "friends" | "requests" | "add";
+
+export default function DirectMessages({ user, token, onClose }: Props) {
+  const [tab, setTab] = useState<Tab>("friends");
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [addUsername, setAddUsername] = useState("");
+  const [addStatus, setAddStatus] = useState<string | null>(null);
+  const [activeFriend, setActiveFriend] = useState<Friend | null>(null);
+  const [messages, setMessages] = useState<DMessage[]>([]);
+  const [msgText, setMsgText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadFriends = async () => {
+    const data = await apiFriends("list", token);
+    if (data.friends) setFriends(data.friends);
+  };
+
+  const loadRequests = async () => {
+    const data = await apiFriends("requests", token);
+    if (data.requests) setRequests(data.requests);
+  };
+
+  useEffect(() => {
+    loadFriends();
+    loadRequests();
+  }, []);
+
+  useEffect(() => {
+    if (!activeFriend) return;
+    const load = async () => {
+      const data = await apiGetDM(activeFriend.id, token);
+      if (data.messages) setMessages(data.messages);
+    };
+    load();
+    pollRef.current = setInterval(load, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [activeFriend]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleAdd = async () => {
+    if (!addUsername.trim()) return;
+    setLoading(true);
+    setAddStatus(null);
+    const data = await apiSendFriendReq(addUsername.trim(), token);
+    setLoading(false);
+    if (data.ok) {
+      setAddStatus("✓ Запрос отправлен!");
+      setAddUsername("");
+    } else {
+      setAddStatus(data.error || "Ошибка");
+    }
+  };
+
+  const handleRespond = async (req: FriendRequest, accept: boolean) => {
+    await apiRespondReq(req.request_id, accept, token);
+    setRequests(r => r.filter(x => x.request_id !== req.request_id));
+    if (accept) loadFriends();
+  };
+
+  const handleSend = async () => {
+    if (!msgText.trim() || !activeFriend) return;
+    const text = msgText.trim();
+    setMsgText("");
+    const data = await apiSendDM(activeFriend.id, text, token);
+    if (data.message) setMessages(m => [...m, data.message]);
+  };
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  };
+
+  if (activeFriend) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-stretch justify-start bg-black/60" onClick={onClose}>
+        <div
+          className="relative flex flex-col bg-[#36393f] w-full max-w-md h-full shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-3 px-4 py-3 bg-[#2f3136] border-b border-black/20">
+            <button
+              className="text-[#b9bbbe] hover:text-white transition-colors p-1"
+              onClick={() => setActiveFriend(null)}
+            >
+              <Icon name="ArrowLeft" size={18} />
+            </button>
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+              style={{ background: avatarColor(activeFriend.username) }}
+            >
+              {activeFriend.username[0].toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="font-semibold text-white text-sm truncate">{activeFriend.username}</div>
+              {activeFriend.favorite_game && (
+                <div className="text-xs text-[#b9bbbe] truncate">{activeFriend.favorite_game}</div>
+              )}
+            </div>
+            <button className="ml-auto text-[#b9bbbe] hover:text-white transition-colors" onClick={onClose}>
+              <Icon name="X" size={18} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2 min-h-0">
+            {messages.length === 0 && (
+              <div className="text-center text-[#72767d] text-sm mt-8">
+                Начни переписку с {activeFriend.username}
+              </div>
+            )}
+            {messages.map(msg => {
+              const isMe = msg.username === user.username;
+              return (
+                <div key={msg.id} className={`flex gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0 self-end"
+                    style={{ background: avatarColor(msg.username) }}
+                  >
+                    {msg.username[0].toUpperCase()}
+                  </div>
+                  <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm break-words ${
+                    isMe ? "bg-[#5865f2] text-white rounded-br-sm" : "bg-[#40444b] text-[#dcddde] rounded-bl-sm"
+                  }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="px-4 py-3 bg-[#40444b] mx-4 mb-4 rounded-lg flex gap-2 items-center">
+            <input
+              className="flex-1 bg-transparent text-white placeholder-[#72767d] text-sm outline-none"
+              placeholder={`Сообщение для ${activeFriend.username}...`}
+              value={msgText}
+              onChange={e => setMsgText(e.target.value)}
+              onKeyDown={handleKey}
+            />
+            <button
+              className="text-[#b9bbbe] hover:text-white transition-colors disabled:opacity-40"
+              onClick={handleSend}
+              disabled={!msgText.trim()}
+            >
+              <Icon name="Send" size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-stretch justify-start bg-black/60" onClick={onClose}>
+      <div
+        className="relative flex flex-col bg-[#36393f] w-full max-w-sm h-full shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3 bg-[#2f3136] border-b border-black/20">
+          <span className="font-semibold text-white text-sm">Личные сообщения</span>
+          <button className="text-[#b9bbbe] hover:text-white transition-colors" onClick={onClose}>
+            <Icon name="X" size={18} />
+          </button>
+        </div>
+
+        <div className="flex border-b border-black/20">
+          {(["friends", "requests", "add"] as Tab[]).map(t => (
+            <button
+              key={t}
+              className={`flex-1 py-2.5 text-xs font-medium transition-colors relative ${
+                tab === t ? "text-white" : "text-[#72767d] hover:text-[#b9bbbe]"
+              }`}
+              onClick={() => { setTab(t); setAddStatus(null); }}
+            >
+              {t === "friends" && "Друзья"}
+              {t === "requests" && (
+                <span className="flex items-center justify-center gap-1">
+                  Запросы
+                  {requests.length > 0 && (
+                    <span className="bg-[#ed4245] text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                      {requests.length}
+                    </span>
+                  )}
+                </span>
+              )}
+              {t === "add" && "Добавить"}
+              {tab === t && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#5865f2]" />}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {tab === "friends" && (
+            <div className="p-2">
+              {friends.length === 0 && (
+                <div className="text-center text-[#72767d] text-sm mt-8 px-4">
+                  У тебя пока нет друзей.<br />Добавь кого-нибудь!
+                </div>
+              )}
+              {friends.map(f => (
+                <button
+                  key={f.id}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[#40444b] transition-colors text-left"
+                  onClick={() => setActiveFriend(f)}
+                >
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                    style={{ background: avatarColor(f.username) }}
+                  >
+                    {f.username[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-white text-sm font-medium truncate">{f.username}</div>
+                    {f.favorite_game && (
+                      <div className="text-[#b9bbbe] text-xs truncate">{f.favorite_game}</div>
+                    )}
+                  </div>
+                  <Icon name="MessageCircle" size={16} className="ml-auto text-[#72767d] flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tab === "requests" && (
+            <div className="p-2">
+              {requests.length === 0 && (
+                <div className="text-center text-[#72767d] text-sm mt-8 px-4">
+                  Нет новых заявок в друзья
+                </div>
+              )}
+              {requests.map(r => (
+                <div key={r.request_id} className="flex items-center gap-3 px-3 py-2.5 rounded-md">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                    style={{ background: avatarColor(r.username) }}
+                  >
+                    {r.username[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-white text-sm font-medium truncate">{r.username}</div>
+                    {r.favorite_game && (
+                      <div className="text-[#b9bbbe] text-xs truncate">{r.favorite_game}</div>
+                    )}
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      className="w-7 h-7 rounded-full bg-[#3ba55c] hover:bg-[#2d9150] flex items-center justify-center transition-colors"
+                      onClick={() => handleRespond(r, true)}
+                    >
+                      <Icon name="Check" size={14} className="text-white" />
+                    </button>
+                    <button
+                      className="w-7 h-7 rounded-full bg-[#ed4245] hover:bg-[#c53a3c] flex items-center justify-center transition-colors"
+                      onClick={() => handleRespond(r, false)}
+                    >
+                      <Icon name="X" size={14} className="text-white" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === "add" && (
+            <div className="p-4">
+              <p className="text-[#b9bbbe] text-xs mb-3">
+                Введи никнейм пользователя, чтобы отправить заявку в друзья
+              </p>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 bg-[#40444b] text-white placeholder-[#72767d] text-sm px-3 py-2 rounded-md outline-none focus:ring-1 focus:ring-[#5865f2]"
+                  placeholder="Никнейм"
+                  value={addUsername}
+                  onChange={e => setAddUsername(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleAdd()}
+                />
+                <button
+                  className="bg-[#5865f2] hover:bg-[#4752c4] text-white text-sm px-3 py-2 rounded-md transition-colors disabled:opacity-50"
+                  onClick={handleAdd}
+                  disabled={loading || !addUsername.trim()}
+                >
+                  {loading ? <Icon name="Loader2" size={16} className="animate-spin" /> : "Найти"}
+                </button>
+              </div>
+              {addStatus && (
+                <p className={`text-xs mt-2 ${addStatus.startsWith("✓") ? "text-[#3ba55c]" : "text-[#ed4245]"}`}>
+                  {addStatus}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

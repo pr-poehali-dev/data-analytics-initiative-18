@@ -31,9 +31,10 @@ interface ChannelsSidebarProps {
   token: string | null;
   onLogout: () => void;
   onAdminClick?: () => void;
+  onDMClick?: () => void;
 }
 
-const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoomId, onChannelChange, onRoomChange, user, token, onLogout, onAdminClick }: ChannelsSidebarProps) => {
+const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoomId, onChannelChange, onRoomChange, user, token, onLogout, onAdminClick, onDMClick }: ChannelsSidebarProps) => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
@@ -107,9 +108,16 @@ const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoom
     <div className={`${mobileSidebarOpen ? "flex" : "hidden"} lg:flex w-full lg:w-60 bg-[#2f3136] flex-col`}>
       <div className="p-4 border-b border-[#202225] flex items-center justify-between flex-shrink-0">
         <h2 className="text-white font-semibold">Frikords</h2>
-        <Button variant="ghost" className="lg:hidden text-[#b9bbbe] hover:text-white hover:bg-[#40444b] p-1" onClick={onClose}>
-          <X className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {user && onDMClick && (
+            <Button variant="ghost" className="text-[#b9bbbe] hover:text-white hover:bg-[#40444b] p-1" onClick={onDMClick} title="Личные сообщения">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </Button>
+          )}
+          <Button variant="ghost" className="lg:hidden text-[#b9bbbe] hover:text-white hover:bg-[#40444b] p-1" onClick={onClose}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
