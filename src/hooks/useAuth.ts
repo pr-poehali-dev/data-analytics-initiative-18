@@ -5,6 +5,7 @@ export interface User {
   username: string;
   favorite_game: string;
   is_admin: boolean;
+  avatar_url?: string;
 }
 
 const TOKEN_KEY = "frikords_token";

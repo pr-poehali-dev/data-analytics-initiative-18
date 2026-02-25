@@ -38,12 +38,19 @@ export const api = {
       req("messages", "POST", token, { content, channel, ...(room_id ? { room_id } : {}) }),
     remove: (token: string, msg_id: number) =>
       req("delete_msg", "POST", token, { msg_id }),
+    edit: (token: string, msg_id: number, content: string) =>
+      req("edit_msg", "POST", token, { msg_id, content }),
   },
   reactions: {
     add: (token: string, msg_id: number, emoji: string) =>
       req("react", "POST", token, { msg_id, emoji }),
     remove: (token: string, msg_id: number, emoji: string) =>
       req("unreact", "POST", token, { msg_id, emoji }),
+  },
+  profile: {
+    get: (username: string) => req("profile", "GET", null, undefined, { username }),
+    uploadAvatar: (token: string, image: string) =>
+      req("upload_avatar", "POST", token, { image }),
   },
   rooms: {
     list: (token?: string | null) => req("rooms", "GET", token),

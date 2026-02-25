@@ -13,6 +13,9 @@
     {"name": "DM send no auth", "method": "POST", "path": "/?action=dm", "body": {"to": 1, "content": "hi"}, "expectedStatus": 401},
     {"name": "Delete msg no auth", "method": "POST", "path": "/?action=delete_msg", "body": {"msg_id": 1}, "expectedStatus": 401},
     {"name": "Settings no auth", "method": "GET", "path": "/?action=settings", "expectedStatus": 401},
-    {"name": "Online", "method": "GET", "path": "/?action=online", "expectedStatus": 200}
+    {"name": "Online", "method": "GET", "path": "/?action=online", "expectedStatus": 200},
+    {"name": "Profile no username", "method": "GET", "path": "/?action=profile", "expectedStatus": 400},
+    {"name": "Edit msg no auth", "method": "POST", "path": "/?action=edit_msg", "body": {"msg_id": 1, "content": "hi"}, "expectedStatus": 401},
+    {"name": "Upload avatar no auth", "method": "POST", "path": "/?action=upload_avatar", "body": {"image": "data:image/png;base64,abc"}, "expectedStatus": 401}
   ]
 }

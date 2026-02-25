@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import Icon from "@/components/ui/icon";
 import { User } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
+import ProfileModal from "@/components/ProfileModal";
 
 interface Reaction {
   emoji: string;
@@ -17,14 +18,23 @@ interface Message {
   created_at: string;
   username: string;
   favorite_game: string;
+  avatar_url?: string;
   is_removed?: boolean;
   author_id?: number;
+  edited?: boolean;
   reactions?: Reaction[];
+  replyTo?: { id: number; username: string; content: string };
 }
 
 interface OnlineUser {
   username: string;
   favorite_game: string;
+}
+
+interface ContextMenu {
+  msgId: number;
+  x: number;
+  y: number;
 }
 
 interface ChatAreaProps {
@@ -46,18 +56,11 @@ const CHANNEL_LABELS: Record<string, string> = {
 
 const EMOJI_LIST = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👎", "🎮"];
 
-function getAvatarColor(username: string) {
-  const colors = [
-    "from-purple-500 to-pink-500",
-    "from-green-500 to-blue-500",
-    "from-orange-500 to-red-500",
-    "from-cyan-500 to-blue-500",
-    "from-yellow-500 to-orange-500",
-    "from-[#5865f2] to-[#7c3aed]",
-  ];
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) hash = username.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
+function avatarBg(name: string) {
+  const colors = ["#5865f2","#eb459e","#ed4245","#57f287","#1abc9c","#3498db","#e91e63","#f39c12"];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return colors[Math.abs(h) % colors.length];
 }
 
 function formatTime(iso: string) {
@@ -90,9 +93,16 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
   const [newMsgCount, setNewMsgCount] = useState(0);
   const [hoveredMsg, setHoveredMsg] = useState<number | null>(null);
   const [emojiPickerFor, setEmojiPickerFor] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editingMsg, setEditingMsg] = useState<{ id: number; content: string } | null>(null);
+  const [profileUsername, setProfileUsername] = useState<string | null>(null);
   const lastMsgIdRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const uid = (user as unknown as { id: number } | null)?.id;
 
   const isAtBottom = () => {
     const el = scrollContainerRef.current;
@@ -143,18 +153,41 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
     setMessages([]);
     setNewMsgCount(0);
     lastMsgIdRef.current = null;
+    setReplyTo(null);
+    setEditingMsg(null);
     fetchMessages();
     fetchOnline();
     const interval = setInterval(() => { fetchMessages(); fetchOnline(); }, 5000);
     return () => clearInterval(interval);
   }, [channel, roomId]);
 
+  useEffect(() => {
+    const close = () => setContextMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", e => { if (e.key === "Escape") { setContextMenu(null); setEditingMsg(null); setReplyTo(null); } });
+    return () => window.removeEventListener("click", close);
+  }, []);
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !token) return;
+
+    if (editingMsg) {
+      const res = await api.messages.edit(token, editingMsg.id, input.trim());
+      if (res.ok) {
+        setMessages(prev => prev.map(m => m.id === editingMsg.id ? { ...m, content: input.trim(), edited: true } : m));
+      }
+      setEditingMsg(null);
+      setInput("");
+      return;
+    }
+
     setSending(true);
-    const content = input.trim();
+    const content = replyTo
+      ? `↩ @${replyTo.username}: "${replyTo.content.slice(0, 50)}${replyTo.content.length > 50 ? '…' : ''}"\n${input.trim()}`
+      : input.trim();
     setInput("");
+    setReplyTo(null);
     const data = await api.messages.send(token, content, channel, roomId);
     setSending(false);
     if (data.success && data.message) {
@@ -167,6 +200,7 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
 
   const handleDelete = async (msgId: number) => {
     if (!token) return;
+    setContextMenu(null);
     const res = await api.messages.remove(token, msgId);
     if (res.ok) {
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, is_removed: true, content: "" } : m));
@@ -188,6 +222,37 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
     }));
   };
 
+  const handleContextMenu = (e: React.MouseEvent, msg: Message) => {
+    if (msg.is_removed) return;
+    e.preventDefault();
+    setContextMenu({ msgId: msg.id, x: e.clientX, y: e.clientY });
+  };
+
+  const handleCopy = (msgId: number) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (msg) navigator.clipboard.writeText(msg.content);
+    setContextMenu(null);
+  };
+
+  const handleReply = (msgId: number) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (msg) {
+      setReplyTo(msg);
+      inputRef.current?.focus();
+    }
+    setContextMenu(null);
+  };
+
+  const handleEdit = (msgId: number) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (msg) {
+      setEditingMsg({ id: msg.id, content: msg.content });
+      setInput(msg.content);
+      inputRef.current?.focus();
+    }
+    setContextMenu(null);
+  };
+
   const handleEnableNotif = async () => {
     const perm = await Notification.requestPermission();
     setNotifEnabled(perm === "granted");
@@ -195,8 +260,11 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
 
   const label = roomId ? (roomName || "комната") : (CHANNEL_LABELS[channel] || channel);
 
+  const ctxMsg = contextMenu ? messages.find(m => m.id === contextMenu.msgId) : null;
+  const isCtxOwn = ctxMsg && uid === ctxMsg.author_id;
+
   return (
-    <div className="flex-1 flex min-h-0 overflow-hidden" onClick={() => setEmojiPickerFor(null)}>
+    <div className="flex-1 flex min-h-0 overflow-hidden" onClick={() => { setEmojiPickerFor(null); setContextMenu(null); }}>
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
         {/* Header */}
         <div className="h-12 bg-[#36393f] border-b border-[#202225] flex items-center px-4 gap-2 flex-shrink-0">
@@ -237,34 +305,50 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
               </div>
             )}
             {messages.map((msg) => {
-              const isOwn = user && msg.author_id === (user as unknown as { id: number }).id;
+              const isOwn = uid === msg.author_id;
               const isHovered = hoveredMsg === msg.id;
               return (
                 <div
                   key={msg.id}
                   className="relative flex gap-3 hover:bg-[#32353b] rounded px-2 py-1 -mx-2 group"
                   onMouseEnter={() => setHoveredMsg(msg.id)}
-                  onMouseLeave={() => { setHoveredMsg(null); }}
+                  onMouseLeave={() => setHoveredMsg(null)}
+                  onContextMenu={e => handleContextMenu(e, msg)}
                 >
-                  <div className={`w-9 h-9 bg-gradient-to-r ${getAvatarColor(msg.username)} rounded-full flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                    <span className="text-white text-sm font-semibold">{msg.username[0].toUpperCase()}</span>
+                  {/* Avatar */}
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer overflow-hidden"
+                    style={{ background: msg.avatar_url ? undefined : avatarBg(msg.username) }}
+                    onClick={() => setProfileUsername(msg.username)}
+                  >
+                    {msg.avatar_url
+                      ? <img src={msg.avatar_url} alt={msg.username} className="w-full h-full object-cover" />
+                      : <span className="text-white text-sm font-semibold">{msg.username[0].toUpperCase()}</span>
+                    }
                   </div>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 mb-0.5">
-                      <span className="text-white font-medium text-sm">{msg.username}</span>
+                      <span
+                        className="text-white font-medium text-sm cursor-pointer hover:underline"
+                        onClick={() => setProfileUsername(msg.username)}
+                      >
+                        {msg.username}
+                      </span>
                       {msg.favorite_game && !msg.is_removed && <span className="text-[#5865f2] text-xs">🎮 {msg.favorite_game}</span>}
                       <span className="text-[#72767d] text-xs">{formatTime(msg.created_at)}</span>
+                      {msg.edited && !msg.is_removed && <span className="text-[#72767d] text-xs italic">(изменено)</span>}
                     </div>
                     {msg.is_removed ? (
                       <p className="text-[#72767d] text-sm italic">сообщение удалено</p>
                     ) : (
-                      <p className="text-[#dcddde] text-sm break-words">{msg.content}</p>
+                      <p className="text-[#dcddde] text-sm break-words whitespace-pre-wrap">{msg.content}</p>
                     )}
                     {/* Reactions row */}
                     {!msg.is_removed && (msg.reactions || []).length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
                         {(msg.reactions || []).map(r => {
-                          const iMine = user && r.users.includes((user as unknown as { id: number }).id);
+                          const iMine = user && r.users.includes(uid!);
                           return (
                             <button
                               key={r.emoji}
@@ -284,7 +368,7 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
                     )}
                   </div>
 
-                  {/* Action buttons on hover */}
+                  {/* Hover action buttons */}
                   {!msg.is_removed && user && isHovered && (
                     <div
                       className="absolute right-2 top-0 -translate-y-1/2 flex items-center gap-1 bg-[#2f3136] border border-[#202225] rounded-lg shadow-lg px-1 py-0.5 z-10"
@@ -297,14 +381,30 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
                       >
                         <Icon name="Smile" size={14} />
                       </button>
+                      <button
+                        onClick={() => handleReply(msg.id)}
+                        className="text-[#b9bbbe] hover:text-white transition-colors p-1 rounded hover:bg-[#40444b]"
+                        title="Ответить"
+                      >
+                        <Icon name="Reply" size={14} />
+                      </button>
                       {isOwn && (
-                        <button
-                          onClick={() => handleDelete(msg.id)}
-                          className="text-[#b9bbbe] hover:text-[#ed4245] transition-colors p-1 rounded hover:bg-[#40444b]"
-                          title="Удалить"
-                        >
-                          <Icon name="Trash2" size={14} />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleEdit(msg.id)}
+                            className="text-[#b9bbbe] hover:text-white transition-colors p-1 rounded hover:bg-[#40444b]"
+                            title="Изменить"
+                          >
+                            <Icon name="Pencil" size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(msg.id)}
+                            className="text-[#b9bbbe] hover:text-[#ed4245] transition-colors p-1 rounded hover:bg-[#40444b]"
+                            title="Удалить"
+                          >
+                            <Icon name="Trash2" size={14} />
+                          </button>
+                        </>
                       )}
                     </div>
                   )}
@@ -341,14 +441,36 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
           )}
         </div>
 
+        {/* Reply / Edit bar */}
+        {(replyTo || editingMsg) && (
+          <div className="mx-3 mb-1 px-3 py-2 bg-[#2f3136] rounded-t-lg border-l-2 border-[#5865f2] flex items-center gap-2">
+            <Icon name={editingMsg ? "Pencil" : "Reply"} size={14} className="text-[#5865f2] flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-[#5865f2] text-xs font-medium">
+                {editingMsg ? "Редактирование" : `Ответ для @${replyTo?.username}`}
+              </span>
+              {replyTo && (
+                <p className="text-[#72767d] text-xs truncate">{replyTo.content}</p>
+              )}
+            </div>
+            <button
+              onClick={() => { setReplyTo(null); setEditingMsg(null); setInput(""); }}
+              className="text-[#72767d] hover:text-white flex-shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Input */}
         <div className="p-3 flex-shrink-0 border-t border-[#202225]">
           {user ? (
             <form onSubmit={sendMessage} className="flex gap-2">
               <input
+                ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder={`Написать в #${label}...`}
+                placeholder={editingMsg ? "Редактировать сообщение..." : `Написать в #${label}...`}
                 disabled={sending}
                 className="flex-1 bg-[#40444b] text-white placeholder-[#72767d] rounded px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[#5865f2] disabled:opacity-60"
               />
@@ -383,8 +505,15 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
               <p className="text-[#72767d] text-xs text-center mt-4">Никого нет онлайн</p>
             )}
             {onlineUsers.map((u) => (
-              <div key={u.username} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#36393f] rounded mx-1">
-                <div className={`w-7 h-7 bg-gradient-to-r ${getAvatarColor(u.username)} rounded-full flex items-center justify-center flex-shrink-0`}>
+              <div
+                key={u.username}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#36393f] rounded mx-1 cursor-pointer"
+                onClick={() => setProfileUsername(u.username)}
+              >
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ background: avatarBg(u.username) }}
+                >
                   <span className="text-white text-xs font-semibold">{u.username[0].toUpperCase()}</span>
                 </div>
                 <div className="min-w-0">
@@ -398,6 +527,63 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
             ))}
           </div>
         </div>
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-[#18191c] border border-[#202225] rounded-lg shadow-2xl py-1 min-w-[160px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            onClick={() => handleCopy(contextMenu.msgId)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-[#dcddde] hover:bg-[#5865f2] hover:text-white text-sm transition-colors"
+          >
+            <Icon name="Copy" size={14} />
+            Скопировать
+          </button>
+          {user && (
+            <button
+              onClick={() => handleReply(contextMenu.msgId)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-[#dcddde] hover:bg-[#5865f2] hover:text-white text-sm transition-colors"
+            >
+              <Icon name="Reply" size={14} />
+              Ответить
+            </button>
+          )}
+          {isCtxOwn && (
+            <button
+              onClick={() => handleEdit(contextMenu.msgId)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-[#dcddde] hover:bg-[#5865f2] hover:text-white text-sm transition-colors"
+            >
+              <Icon name="Pencil" size={14} />
+              Изменить
+            </button>
+          )}
+          {isCtxOwn && (
+            <>
+              <div className="border-t border-[#202225] my-1" />
+              <button
+                onClick={() => handleDelete(contextMenu.msgId)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-[#ed4245] hover:bg-[#ed4245] hover:text-white text-sm transition-colors"
+              >
+                <Icon name="Trash2" size={14} />
+                Удалить
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Profile modal */}
+      {profileUsername && (
+        <ProfileModal
+          username={profileUsername}
+          onClose={() => setProfileUsername(null)}
+          token={token}
+          currentUserId={uid}
+        />
       )}
     </div>
   );

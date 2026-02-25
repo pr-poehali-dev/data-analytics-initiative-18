@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Icon from "@/components/ui/icon";
 import { User } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
@@ -14,8 +14,39 @@ export default function SettingsModal({ user, token, onClose, onUpdate }: Props)
   const [username, setUsername] = useState(user.username);
   const [game, setGame] = useState(user.favorite_game || "");
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string>(user.avatar_url || "");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Файл больше 2MB");
+      return;
+    }
+    setUploadingAvatar(true);
+    setError(null);
+    setStatus(null);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setAvatarPreview(dataUrl);
+      const data = await api.profile.uploadAvatar(token, dataUrl);
+      setUploadingAvatar(false);
+      if (data.ok) {
+        const newUrl = data.avatar_url as string;
+        setAvatarPreview(newUrl);
+        onUpdate({ avatar_url: newUrl });
+        setStatus("Аватарка обновлена!");
+      } else {
+        setError((data.error as string) || "Ошибка загрузки");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -47,18 +78,44 @@ export default function SettingsModal({ user, token, onClose, onUpdate }: Props)
           </button>
         </div>
 
-        {/* Avatar preview */}
-        <div className="flex items-center gap-3">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
-            style={{ background: avatarBg(username || user.username) }}
-          >
-            {(username || user.username)[0]?.toUpperCase()}
+        {/* Avatar */}
+        <div className="flex items-center gap-4">
+          <div className="relative group cursor-pointer" onClick={() => fileRef.current?.click()}>
+            {avatarPreview ? (
+              <img src={avatarPreview} alt="avatar" className="w-16 h-16 rounded-full object-cover" />
+            ) : (
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0"
+                style={{ background: avatarBg(username || user.username) }}
+              >
+                {(username || user.username)[0]?.toUpperCase()}
+              </div>
+            )}
+            <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              {uploadingAvatar
+                ? <Icon name="Loader2" size={20} className="text-white animate-spin" />
+                : <Icon name="Camera" size={20} className="text-white" />
+              }
+            </div>
           </div>
           <div>
             <div className="text-white text-sm font-medium">{username || user.username}</div>
-            <div className="text-[#b9bbbe] text-xs">{game || "Игра не указана"}</div>
+            <div className="text-[#b9bbbe] text-xs mb-1">{game || "Игра не указана"}</div>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="text-[#5865f2] text-xs hover:underline"
+              disabled={uploadingAvatar}
+            >
+              Сменить аватарку
+            </button>
           </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handleAvatarChange}
+          />
         </div>
 
         <div className="flex flex-col gap-3">

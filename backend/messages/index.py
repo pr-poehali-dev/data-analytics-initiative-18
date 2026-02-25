@@ -1,8 +1,11 @@
+import base64
 import json
 import os
 import re
+import time
 # v3
 import secrets
+import boto3
 import psycopg2
 
 CORS_H = {
@@ -51,6 +54,11 @@ def get_user(cur, schema, token, require_admin=False):
     af = "AND u.is_admin=TRUE" if require_admin else ""
     cur.execute(f"SELECT u.id,u.username,u.favorite_game,u.is_banned,u.is_admin FROM {schema}.sessions s JOIN {schema}.users u ON u.id=s.user_id WHERE s.token='{safe}' AND u.is_banned=FALSE {af}")
     return cur.fetchone()
+
+def s3_client():
+    return boto3.client('s3', endpoint_url='https://bucket.poehali.dev',
+        aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'])
 
 def get_reactions(cur, schema, message_ids):
     if not message_ids:
@@ -110,7 +118,7 @@ def handler(event: dict, context) -> dict:
                 if not cur.fetchone(): return err(403, 'Ты не участник этой комнаты')
                 cur.execute(f"UPDATE {schema}.users SET last_seen=now() WHERE id={uid}")
                 cur.execute(
-                    f"SELECT m.id,m.content,m.created_at,u.username,u.favorite_game,m.is_removed,m.user_id "
+                    f"SELECT m.id,m.content,m.created_at,u.username,u.favorite_game,m.is_removed,m.user_id,m.edited,u.avatar_url "
                     f"FROM {schema}.messages m JOIN {schema}.users u ON u.id=m.user_id "
                     f"WHERE m.room_id={room_id} ORDER BY m.created_at ASC LIMIT 100"
                 )
@@ -120,7 +128,7 @@ def handler(event: dict, context) -> dict:
                 if user:
                     cur.execute(f"UPDATE {schema}.users SET last_seen=now() WHERE id={user[0]}")
                 cur.execute(
-                    f"SELECT m.id,m.content,m.created_at,u.username,u.favorite_game,m.is_removed,m.user_id "
+                    f"SELECT m.id,m.content,m.created_at,u.username,u.favorite_game,m.is_removed,m.user_id,m.edited,u.avatar_url "
                     f"FROM {schema}.messages m JOIN {schema}.users u ON u.id=m.user_id "
                     f"WHERE m.channel='{channel}' AND m.room_id IS NULL ORDER BY m.created_at ASC LIMIT 100"
                 )
@@ -129,7 +137,7 @@ def handler(event: dict, context) -> dict:
             reactions = get_reactions(cur, schema, message_ids)
             msgs = []
             for r in rows:
-                mid, content, created_at, username, fav, is_removed, msg_uid = r
+                mid, content, created_at, username, fav, is_removed, msg_uid, edited, avatar_url = r
                 msgs.append({
                     'id': mid,
                     'content': content if not is_removed else '',
@@ -138,6 +146,8 @@ def handler(event: dict, context) -> dict:
                     'favorite_game': fav or '',
                     'is_removed': bool(is_removed),
                     'author_id': msg_uid,
+                    'edited': bool(edited),
+                    'avatar_url': avatar_url or '',
                     'reactions': reactions.get(mid, [])
                 })
             return resp(200, {'messages': msgs})
@@ -169,10 +179,14 @@ def handler(event: dict, context) -> dict:
                 cur.execute(f"INSERT INTO {schema}.messages(user_id,channel,content) VALUES({uid},'{channel}','{sc}') RETURNING id,created_at")
 
             msg_id, created_at = cur.fetchone()
+            cur.execute(f"SELECT avatar_url FROM {schema}.users WHERE id={uid}")
+            av_row = cur.fetchone()
             return resp(200, {'success': True, 'message': {
                 'id': msg_id, 'content': content, 'created_at': str(created_at),
                 'username': uname, 'favorite_game': fav_game or '',
-                'is_removed': False, 'author_id': uid, 'reactions': []
+                'is_removed': False, 'author_id': uid, 'edited': False,
+                'avatar_url': av_row[0] if av_row and av_row[0] else '',
+                'reactions': []
             }})
 
     # ─── DELETE MESSAGE ───────────────────────────────────────
@@ -330,6 +344,65 @@ def handler(event: dict, context) -> dict:
 
         return resp(200, {'ok': True, 'already_member': already})
 
+    # ─── EDIT MESSAGE ─────────────────────────────────────────
+
+    if action == 'edit_msg' and method == 'POST':
+        user = get_user(cur, schema, token)
+        if not user: return err(401, 'Необходима авторизация')
+        uid = user[0]
+        msg_id = int(body.get('msg_id', 0))
+        content = sanitize(body.get('content') or '')
+        if not msg_id: return err(400, 'Укажи msg_id')
+        if not content: return err(400, 'Пустое сообщение')
+        if len(content) > 2000: return err(400, 'Максимум 2000 символов')
+        cur.execute(f"SELECT user_id FROM {schema}.messages WHERE id={msg_id} AND is_removed=FALSE")
+        row = cur.fetchone()
+        if not row: return err(404, 'Сообщение не найдено')
+        if row[0] != uid: return err(403, 'Нет прав')
+        sc = content.replace("'", "''")
+        cur.execute(f"UPDATE {schema}.messages SET content='{sc}', edited=TRUE WHERE id={msg_id}")
+        return resp(200, {'ok': True, 'content': content})
+
+    # ─── PROFILE ─────────────────────────────────────────────
+
+    if action == 'profile' and method == 'GET':
+        target_username = params.get('username', '').replace("'", "''")
+        if not target_username: return err(400, 'Укажи username')
+        cur.execute(f"SELECT id,username,favorite_game,avatar_url,created_at FROM {schema}.users WHERE username='{target_username}' AND is_banned=FALSE")
+        row = cur.fetchone()
+        if not row: return err(404, 'Пользователь не найден')
+        uid2, uname2, fav2, avatar2, created2 = row
+        cur.execute(f"SELECT COUNT(*) FROM {schema}.messages WHERE user_id={uid2} AND is_removed=FALSE")
+        msg_count = cur.fetchone()[0]
+        return resp(200, {'id': uid2, 'username': uname2, 'favorite_game': fav2 or '', 'avatar_url': avatar2 or '', 'created_at': str(created2), 'message_count': msg_count})
+
+    # ─── AVATAR UPLOAD ────────────────────────────────────────
+
+    if action == 'upload_avatar' and method == 'POST':
+        user = get_user(cur, schema, token)
+        if not user: return err(401, 'Необходима авторизация')
+        uid = user[0]
+        data_url = body.get('image', '')
+        if not data_url: return err(400, 'Нет изображения')
+        if ',' not in data_url: return err(400, 'Неверный формат')
+        header, b64data = data_url.split(',', 1)
+        if 'image/jpeg' in header or 'image/jpg' in header:
+            ext, ct = 'jpg', 'image/jpeg'
+        elif 'image/png' in header:
+            ext, ct = 'png', 'image/png'
+        elif 'image/webp' in header:
+            ext, ct = 'webp', 'image/webp'
+        else:
+            return err(400, 'Допустимы только JPG, PNG, WebP')
+        img_bytes = base64.b64decode(b64data)
+        if len(img_bytes) > 2 * 1024 * 1024: return err(400, 'Файл больше 2MB')
+        key = f"avatars/{uid}_{int(time.time())}.{ext}"
+        s3 = s3_client()
+        s3.put_object(Bucket='files', Key=key, Body=img_bytes, ContentType=ct)
+        cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/files/{key}"
+        cur.execute(f"UPDATE {schema}.users SET avatar_url='{cdn_url}' WHERE id={uid}")
+        return resp(200, {'ok': True, 'avatar_url': cdn_url})
+
     # ─── SETTINGS ────────────────────────────────────────────
 
     if action == 'settings':
@@ -338,10 +411,10 @@ def handler(event: dict, context) -> dict:
         uid, uname, fav_game, _, _ = user
 
         if method == 'GET':
-            cur.execute(f"SELECT username, favorite_game, email FROM {schema}.users WHERE id={uid}")
+            cur.execute(f"SELECT username, favorite_game, email, avatar_url FROM {schema}.users WHERE id={uid}")
             row = cur.fetchone()
             if not row: return err(404, 'Пользователь не найден')
-            return resp(200, {'username': row[0], 'favorite_game': row[1] or '', 'email': row[2]})
+            return resp(200, {'username': row[0], 'favorite_game': row[1] or '', 'email': row[2], 'avatar_url': row[3] or ''})
 
         if method == 'POST':
             new_game = sanitize(body.get('favorite_game') or '').replace("'", "''")
@@ -354,9 +427,9 @@ def handler(event: dict, context) -> dict:
                 cur.execute(f"UPDATE {schema}.users SET username='{new_username}' WHERE id={uid}")
             if new_game is not None:
                 cur.execute(f"UPDATE {schema}.users SET favorite_game='{new_game}' WHERE id={uid}")
-            cur.execute(f"SELECT username, favorite_game FROM {schema}.users WHERE id={uid}")
+            cur.execute(f"SELECT username, favorite_game, avatar_url FROM {schema}.users WHERE id={uid}")
             row = cur.fetchone()
-            return resp(200, {'ok': True, 'username': row[0], 'favorite_game': row[1] or ''})
+            return resp(200, {'ok': True, 'username': row[0], 'favorite_game': row[1] or '', 'avatar_url': row[2] or ''})
 
     # ─── ADMIN ───────────────────────────────────────────────
 
