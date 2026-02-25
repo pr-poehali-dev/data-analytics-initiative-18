@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, AlertTriangle, Users, BarChart2, Ban, Search, MessageSquare, Trash2, Hash } from "lucide-react";
+import { X, AlertTriangle, Users, BarChart2, Ban, Search, MessageSquare, Trash2, Hash, Tag, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
@@ -24,6 +24,8 @@ const AdminPanel = ({ token, onClose }: AdminPanelProps) => {
   const [msgColor, setMsgColor] = useState<"green" | "red">("green");
   const [selectedChannel, setSelectedChannel] = useState("general");
   const [confirmClear, setConfirmClear] = useState<string | null>(null);
+  const [editBadgeId, setEditBadgeId] = useState<number | null>(null);
+  const [badgeInput, setBadgeInput] = useState("");
 
   useEffect(() => {
     if (tab === "stats") loadStats();
@@ -75,6 +77,18 @@ const AdminPanel = ({ token, onClose }: AdminPanelProps) => {
       notify("Сообщение удалено", "green");
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, is_removed: true } : m));
     }
+  };
+
+  const handleSetBadge = async (userId: number) => {
+    const data = await api.admin.setBadge(token, userId, badgeInput.trim());
+    if (data.ok) {
+      notify(badgeInput.trim() ? `Тег «${badgeInput.trim()}» выдан` : "Тег снят", "green");
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, badge: badgeInput.trim() || null } : u));
+    } else {
+      notify("Ошибка", "red");
+    }
+    setEditBadgeId(null);
+    setBadgeInput("");
   };
 
   const handleClearChannel = async (channel: string) => {
@@ -173,25 +187,58 @@ const AdminPanel = ({ token, onClose }: AdminPanelProps) => {
               </div>
               <div className="space-y-2">
                 {users.map(u => (
-                  <div key={u.id as number} className="flex items-center justify-between bg-[#36393f] rounded px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-white text-sm font-medium">{u.username as string}</span>
-                        {u.is_admin && <span className="bg-[#faa61a] text-black text-xs px-1 rounded font-bold">ADMIN</span>}
-                        {u.is_banned && <span className="bg-red-500/20 text-red-400 text-xs px-1 rounded border border-red-500/30">БАН</span>}
+                  <div key={u.id as number} className="bg-[#36393f] rounded px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-white text-sm font-medium">{u.username as string}</span>
+                          {u.is_admin && <span className="bg-[#faa61a] text-black text-xs px-1 rounded font-bold">ADMIN</span>}
+                          {u.is_banned && <span className="bg-red-500/20 text-red-400 text-xs px-1 rounded border border-red-500/30">БАН</span>}
+                          {u.badge && <span className="bg-[#5865f2]/20 text-[#5865f2] text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-[#5865f2]/40">{u.badge as string}</span>}
+                        </div>
+                        <div className="text-[#72767d] text-xs truncate">{u.email as string}</div>
                       </div>
-                      <div className="text-[#72767d] text-xs truncate">{u.email as string}</div>
+                      <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Выдать тег"
+                          onClick={() => { setEditBadgeId(u.id as number); setBadgeInput(u.badge as string || ""); }}
+                          className="text-[#5865f2] hover:bg-[#5865f2]/10 p-1 h-auto"
+                        >
+                          <Tag className="w-3.5 h-3.5" />
+                        </Button>
+                        {!u.is_admin && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleBan(u.id as number, !u.is_banned)}
+                            className={`text-xs flex-shrink-0 ${u.is_banned ? "text-green-400 hover:bg-green-500/10" : "text-red-400 hover:bg-red-500/10"}`}
+                          >
+                            <Ban className="w-3 h-3 mr-1" />
+                            {u.is_banned ? "Разбан" : "Бан"}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    {!u.is_admin && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleBan(u.id as number, !u.is_banned)}
-                        className={`text-xs ml-2 flex-shrink-0 ${u.is_banned ? "text-green-400 hover:bg-green-500/10" : "text-red-400 hover:bg-red-500/10"}`}
-                      >
-                        <Ban className="w-3 h-3 mr-1" />
-                        {u.is_banned ? "Разбан" : "Бан"}
-                      </Button>
+                    {editBadgeId === (u.id as number) && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          autoFocus
+                          value={badgeInput}
+                          onChange={e => setBadgeInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") handleSetBadge(u.id as number); if (e.key === "Escape") { setEditBadgeId(null); setBadgeInput(""); } }}
+                          placeholder="Тег (пусто — снять)"
+                          maxLength={64}
+                          className="flex-1 bg-[#40444b] text-white placeholder-[#72767d] rounded px-2 py-1 text-xs outline-none border border-[#5865f2]/50 focus:border-[#5865f2]"
+                        />
+                        <Button size="sm" variant="ghost" onClick={() => handleSetBadge(u.id as number)} className="text-green-400 hover:bg-green-500/10 p-1 h-auto">
+                          <Check className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setEditBadgeId(null); setBadgeInput(""); }} className="text-[#8e9297] hover:text-white p-1 h-auto">
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     )}
                   </div>
                 ))}

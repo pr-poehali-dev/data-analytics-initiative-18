@@ -113,5 +113,7 @@ export const api = {
       req("admin_clear", "POST", token, { room_id }),
     deleteMsg: (token: string, msg_id: number) =>
       req("admin_clear", "POST", token, { msg_id }),
+    setBadge: (token: string, user_id: number, badge: string) =>
+      req("admin_set_badge", "POST", token, { user_id, badge }),
   },
 };

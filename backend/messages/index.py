@@ -118,7 +118,7 @@ def handler(event: dict, context) -> dict:
                 if not cur.fetchone(): return err(403, 'Ты не участник этой комнаты')
                 cur.execute(f"UPDATE {schema}.users SET last_seen=now() WHERE id={uid}")
                 cur.execute(
-                    f"SELECT m.id,m.content,m.created_at,u.username,u.favorite_game,m.is_removed,m.user_id,m.edited,u.avatar_url "
+                    f"SELECT m.id,m.content,m.created_at,u.username,u.favorite_game,m.is_removed,m.user_id,m.edited,u.avatar_url,u.badge "
                     f"FROM {schema}.messages m JOIN {schema}.users u ON u.id=m.user_id "
                     f"WHERE m.room_id={room_id} ORDER BY m.created_at ASC LIMIT 100"
                 )
@@ -128,7 +128,7 @@ def handler(event: dict, context) -> dict:
                 if user:
                     cur.execute(f"UPDATE {schema}.users SET last_seen=now() WHERE id={user[0]}")
                 cur.execute(
-                    f"SELECT m.id,m.content,m.created_at,u.username,u.favorite_game,m.is_removed,m.user_id,m.edited,u.avatar_url "
+                    f"SELECT m.id,m.content,m.created_at,u.username,u.favorite_game,m.is_removed,m.user_id,m.edited,u.avatar_url,u.badge "
                     f"FROM {schema}.messages m JOIN {schema}.users u ON u.id=m.user_id "
                     f"WHERE m.channel='{channel}' AND m.room_id IS NULL ORDER BY m.created_at ASC LIMIT 100"
                 )
@@ -137,7 +137,7 @@ def handler(event: dict, context) -> dict:
             reactions = get_reactions(cur, schema, message_ids)
             msgs = []
             for r in rows:
-                mid, content, created_at, username, fav, is_removed, msg_uid, edited, avatar_url = r
+                mid, content, created_at, username, fav, is_removed, msg_uid, edited, avatar_url, badge = r
                 msgs.append({
                     'id': mid,
                     'content': content if not is_removed else '',
@@ -148,6 +148,7 @@ def handler(event: dict, context) -> dict:
                     'author_id': msg_uid,
                     'edited': bool(edited),
                     'avatar_url': avatar_url or '',
+                    'badge': badge or '',
                     'reactions': reactions.get(mid, [])
                 })
             return resp(200, {'messages': msgs})
@@ -179,13 +180,14 @@ def handler(event: dict, context) -> dict:
                 cur.execute(f"INSERT INTO {schema}.messages(user_id,channel,content) VALUES({uid},'{channel}','{sc}') RETURNING id,created_at")
 
             msg_id, created_at = cur.fetchone()
-            cur.execute(f"SELECT avatar_url FROM {schema}.users WHERE id={uid}")
+            cur.execute(f"SELECT avatar_url, badge FROM {schema}.users WHERE id={uid}")
             av_row = cur.fetchone()
             return resp(200, {'success': True, 'message': {
                 'id': msg_id, 'content': content, 'created_at': str(created_at),
                 'username': uname, 'favorite_game': fav_game or '',
                 'is_removed': False, 'author_id': uid, 'edited': False,
                 'avatar_url': av_row[0] if av_row and av_row[0] else '',
+                'badge': av_row[1] if av_row and av_row[1] else '',
                 'reactions': []
             }})
 
@@ -534,6 +536,22 @@ def handler(event: dict, context) -> dict:
             return resp(200, {'ok':True,'deleted':count})
         else:
             return err(400, 'Укажи channel, room_id или msg_id')
+
+    if action == 'admin_set_badge' and method == 'POST':
+        user = get_user(cur, schema, token, require_admin=True)
+        if not user: return err(403, 'Доступ запрещён')
+        uid_admin = user[0]
+        target_id = body.get('user_id')
+        badge = (body.get('badge') or '').strip()
+        if not target_id: return err(400, 'Укажи user_id')
+        if len(badge) > 64: return err(400, 'Тег слишком длинный (макс. 64 символа)')
+        badge_safe = badge.replace("'", "''")
+        if badge_safe:
+            cur.execute(f"UPDATE {schema}.users SET badge='{badge_safe}' WHERE id={int(target_id)}")
+        else:
+            cur.execute(f"UPDATE {schema}.users SET badge=NULL WHERE id={int(target_id)}")
+        log(cur, schema, 'admin', f"Set badge '{badge}' for user {target_id}", user_id=uid_admin)
+        return resp(200, {'ok': True, 'badge': badge})
 
     # ─── ONLINE ──────────────────────────────────────────────
 

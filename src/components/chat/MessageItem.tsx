@@ -53,6 +53,11 @@ export default function MessageItem({
           >
             {msg.username}
           </span>
+          {msg.badge && !msg.is_removed && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-[#5865f2]/20 text-[#5865f2] border border-[#5865f2]/40 leading-none">
+              {msg.badge}
+            </span>
+          )}
           {msg.favorite_game && !msg.is_removed && <span className="text-[#5865f2] text-xs hidden sm:inline">🎮 {msg.favorite_game}</span>}
           <span className="text-[#72767d] text-xs">{formatTime(msg.created_at)}</span>
           {msg.edited && !msg.is_removed && <span className="text-[#72767d] text-xs italic">(изменено)</span>}
