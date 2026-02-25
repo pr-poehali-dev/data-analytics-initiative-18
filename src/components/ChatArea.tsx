@@ -114,23 +114,45 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
     return () => window.removeEventListener("click", close);
   }, []);
 
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1280;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  };
+
   const handleImageSelect = async (file: File) => {
     if (!token) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result as string;
+    setImageUploading(true);
+    try {
+      const dataUrl = await compressImage(file);
       setImagePreview(dataUrl);
-      setImageUploading(true);
       const res = await api.messages.uploadImage(token, dataUrl);
-      setImageUploading(false);
       if (res.ok && res.image_url) {
         setImageUrl(res.image_url as string);
       } else {
         setImagePreview(null);
         setImageUrl(null);
       }
-    };
-    reader.readAsDataURL(file);
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   const handleImageRemove = () => {

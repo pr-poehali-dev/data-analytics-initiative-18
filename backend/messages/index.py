@@ -3,7 +3,8 @@ import json
 import os
 import re
 import time
-# v3
+import random
+# v4
 import secrets
 import boto3
 import psycopg2
@@ -79,6 +80,12 @@ def get_reactions(cur, schema, message_ids):
         result[mid].append({'emoji': emoji, 'count': cnt, 'users': uids or []})
     return result
 
+def cleanup(cur, schema):
+    cur.execute(f"DELETE FROM {schema}.error_logs WHERE created_at < now() - interval '7 days'")
+    cur.execute(f"DELETE FROM {schema}.rate_limits WHERE window_start < now() - interval '1 day'")
+    cur.execute(f"DELETE FROM {schema}.sessions WHERE created_at < now() - interval '30 days'")
+    cur.execute(f"DELETE FROM {schema}.messages WHERE is_removed=TRUE AND created_at < now() - interval '90 days'")
+
 def handler(event: dict, context) -> dict:
     """Единый API: сообщения, реакции, удаление, комнаты, инвайты, друзья, DM, настройки. ?action="""
 
@@ -95,6 +102,9 @@ def handler(event: dict, context) -> dict:
 
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
     cur = conn.cursor()
+
+    if random.random() < 0.02:
+        cleanup(cur, os.environ['MAIN_DB_SCHEMA'])
 
     def resp(code, data):
         conn.commit(); cur.close(); conn.close()
