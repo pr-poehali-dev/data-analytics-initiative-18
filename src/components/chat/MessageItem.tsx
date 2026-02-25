@@ -28,14 +28,14 @@ export default function MessageItem({
 
   return (
     <div
-      className="relative flex gap-3 hover:bg-[#32353b] rounded px-2 py-1 -mx-2 group"
+      className="relative flex gap-3 hover:bg-[#32353b] rounded px-2 py-1.5 -mx-2 group"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onContextMenu={e => onContextMenu(e, msg)}
     >
       {/* Avatar */}
       <div
-        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer overflow-hidden"
+        className="w-10 h-10 md:w-9 md:h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer overflow-hidden"
         style={{ background: msg.avatar_url ? undefined : avatarBg(msg.username) }}
         onClick={() => onProfileClick(msg.username)}
       >
@@ -46,21 +46,21 @@ export default function MessageItem({
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 mb-0.5">
+        <div className="flex items-baseline gap-2 mb-0.5 flex-wrap">
           <span
-            className="text-white font-medium text-sm cursor-pointer hover:underline"
+            className="text-white font-semibold text-base md:text-sm cursor-pointer hover:underline"
             onClick={() => onProfileClick(msg.username)}
           >
             {msg.username}
           </span>
-          {msg.favorite_game && !msg.is_removed && <span className="text-[#5865f2] text-xs">🎮 {msg.favorite_game}</span>}
+          {msg.favorite_game && !msg.is_removed && <span className="text-[#5865f2] text-xs hidden sm:inline">🎮 {msg.favorite_game}</span>}
           <span className="text-[#72767d] text-xs">{formatTime(msg.created_at)}</span>
           {msg.edited && !msg.is_removed && <span className="text-[#72767d] text-xs italic">(изменено)</span>}
         </div>
         {msg.is_removed ? (
-          <p className="text-[#72767d] text-sm italic">сообщение удалено</p>
+          <p className="text-[#72767d] text-base md:text-sm italic">сообщение удалено</p>
         ) : (
-          <p className="text-[#dcddde] text-sm break-words whitespace-pre-wrap">{msg.content}</p>
+          <p className="text-[#dcddde] text-base md:text-sm break-words whitespace-pre-wrap leading-relaxed">{msg.content}</p>
         )}
         {/* Reactions */}
         {!msg.is_removed && (msg.reactions || []).length > 0 && (

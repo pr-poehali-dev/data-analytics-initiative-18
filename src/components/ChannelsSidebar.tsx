@@ -173,12 +173,12 @@ const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoom
                 <div
                   key={ch.id}
                   onClick={() => { onChannelChange(ch.id); onClose(); }}
-                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                  className={`flex items-center gap-2 px-2 py-2.5 lg:py-1.5 rounded cursor-pointer transition-colors min-h-[44px] lg:min-h-0 ${
                     !activeRoomId && activeChannel === ch.id ? "bg-[#393c43] text-white" : "text-[#8e9297] hover:text-white hover:bg-[#393c43]"
                   }`}
                 >
-                  <Hash className="w-4 h-4" />
-                  <span className="text-sm">{ch.label}</span>
+                  <Hash className="w-5 h-5 lg:w-4 lg:h-4 flex-shrink-0" />
+                  <span className="text-base lg:text-sm">{ch.label}</span>
                 </div>
               ))}
             </div>
@@ -258,13 +258,13 @@ const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoom
                 <div key={room.id}>
                   <div
                     onClick={() => { onRoomChange(room.id, room.name); onClose(); }}
-                    className={`flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-colors group ${
+                    className={`flex items-center justify-between px-2 py-2.5 lg:py-1.5 rounded cursor-pointer transition-colors group min-h-[44px] lg:min-h-0 ${
                       activeRoomId === room.id ? "bg-[#393c43] text-white" : "text-[#8e9297] hover:text-white hover:bg-[#393c43]"
                     }`}
                   >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Hash className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-sm truncate">{room.name}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Hash className="w-5 h-5 lg:w-4 lg:h-4 flex-shrink-0" />
+                      <span className="text-base lg:text-sm truncate">{room.name}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-[#72767d]">{room.members}</span>
@@ -316,12 +316,12 @@ const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoom
         <div className="p-2 bg-[#292b2f] flex items-center gap-2 flex-shrink-0">
           {user ? (
             <>
-              <div className={`w-8 h-8 bg-gradient-to-r ${getAvatarColor(user.username)} rounded-full flex items-center justify-center flex-shrink-0`}>
-                <span className="text-white text-sm font-semibold">{user.username[0].toUpperCase()}</span>
+              <div className={`w-10 h-10 bg-gradient-to-r ${getAvatarColor(user.username)} rounded-full flex items-center justify-center flex-shrink-0`}>
+                <span className="text-white text-base font-semibold">{user.username[0].toUpperCase()}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white text-sm font-medium truncate">{user.username}</div>
-                {user.favorite_game && <div className="text-[#72767d] text-xs truncate">{user.favorite_game}</div>}
+                <div className="text-white text-base lg:text-sm font-medium truncate">{user.username}</div>
+                {user.favorite_game && <div className="text-[#72767d] text-sm lg:text-xs truncate">{user.favorite_game}</div>}
               </div>
               <div className="flex gap-0.5">
                 {user.is_admin && (

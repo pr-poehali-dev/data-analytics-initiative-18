@@ -175,24 +175,24 @@ const Index = () => {
       </div>
 
       {/* Мобильная нижняя навигация */}
-      <div className="lg:hidden flex-shrink-0 bg-[#202225] border-t border-[#111214] flex items-center justify-around px-2 safe-bottom" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <div className="lg:hidden flex-shrink-0 bg-[#202225] border-t border-[#111214] flex items-center justify-around px-2" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         <button
           onClick={() => setMobileSidebarOpen(true)}
-          className="flex flex-col items-center gap-0.5 py-2 px-4 text-[#b9bbbe] active:text-white min-w-[56px] min-h-[56px] justify-center"
+          className="flex flex-col items-center gap-1 py-3 px-5 text-[#b9bbbe] active:text-white min-w-[64px] min-h-[60px] justify-center"
         >
-          <Icon name="Hash" size={22} />
-          <span className="text-[10px]">Каналы</span>
+          <Icon name="Hash" size={24} />
+          <span className="text-xs">Каналы</span>
         </button>
 
         {user ? (
           <button
             onClick={handleOpenDM}
-            className="relative flex flex-col items-center gap-0.5 py-2 px-4 text-[#b9bbbe] active:text-white min-w-[56px] min-h-[56px] justify-center"
+            className="relative flex flex-col items-center gap-1 py-3 px-5 text-[#b9bbbe] active:text-white min-w-[64px] min-h-[60px] justify-center"
           >
-            <Icon name="MessageCircle" size={22} />
-            <span className="text-[10px]">Сообщения</span>
+            <Icon name="MessageCircle" size={24} />
+            <span className="text-xs">Сообщения</span>
             {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-2 min-w-[16px] h-[16px] bg-[#ed4245] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+              <span className="absolute top-2 right-3 min-w-[18px] h-[18px] bg-[#ed4245] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}
@@ -200,28 +200,28 @@ const Index = () => {
         ) : (
           <button
             onClick={() => setShowLoginModal(true)}
-            className="flex flex-col items-center gap-0.5 py-2 px-4 text-[#b9bbbe] active:text-white min-w-[56px] min-h-[56px] justify-center"
+            className="flex flex-col items-center gap-1 py-3 px-5 text-[#b9bbbe] active:text-white min-w-[64px] min-h-[60px] justify-center"
           >
-            <Icon name="LogIn" size={22} />
-            <span className="text-[10px]">Войти</span>
+            <Icon name="LogIn" size={24} />
+            <span className="text-xs">Войти</span>
           </button>
         )}
 
         {user ? (
           <button
             onClick={() => setShowSettings(true)}
-            className="flex flex-col items-center gap-0.5 py-2 px-4 text-[#b9bbbe] active:text-white min-w-[56px] min-h-[56px] justify-center"
+            className="flex flex-col items-center gap-1 py-3 px-5 text-[#b9bbbe] active:text-white min-w-[64px] min-h-[60px] justify-center"
           >
-            <Icon name="Settings" size={22} />
-            <span className="text-[10px]">Профиль</span>
+            <Icon name="Settings" size={24} />
+            <span className="text-xs">Профиль</span>
           </button>
         ) : (
           <button
             onClick={() => setShowRegModal(true)}
-            className="flex flex-col items-center gap-0.5 py-2 px-4 text-[#5865f2] min-w-[56px] min-h-[56px] justify-center"
+            className="flex flex-col items-center gap-1 py-3 px-5 text-[#5865f2] min-w-[64px] min-h-[60px] justify-center"
           >
-            <Icon name="UserPlus" size={22} />
-            <span className="text-[10px] font-medium">Регистрация</span>
+            <Icon name="UserPlus" size={24} />
+            <span className="text-xs font-medium">Регистрация</span>
           </button>
         )}
       </div>

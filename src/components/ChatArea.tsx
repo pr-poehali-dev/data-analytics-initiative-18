@@ -210,38 +210,38 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
     <div className="flex-1 flex min-h-0 overflow-hidden" onClick={() => { setEmojiPickerFor(null); setContextMenu(null); }}>
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
         {/* Header */}
-        <div className="h-12 bg-[#36393f] border-b border-[#202225] flex items-center px-4 gap-2 flex-shrink-0">
-          <Button variant="ghost" className="lg:hidden text-[#8e9297] hover:text-[#dcddde] hover:bg-[#40444b] w-10 h-10 p-0 mr-1 flex-shrink-0" onClick={onSidebarOpen}>
+        <div className="h-14 md:h-12 bg-[#36393f] border-b border-[#202225] flex items-center px-3 gap-2 flex-shrink-0">
+          <Button variant="ghost" className="lg:hidden text-[#8e9297] hover:text-[#dcddde] hover:bg-[#40444b] w-11 h-11 p-0 flex-shrink-0" onClick={onSidebarOpen}>
             <Menu className="w-6 h-6" />
           </Button>
-          <Hash className="w-5 h-5 text-[#8e9297]" />
-          <span className="text-white font-semibold">{label}</span>
-          <div className="ml-auto flex items-center gap-3">
+          <Hash className="w-5 h-5 text-[#8e9297] flex-shrink-0" />
+          <span className="text-white font-semibold text-base md:text-sm truncate">{label}</span>
+          <div className="ml-auto flex items-center gap-1">
             {online !== null && (
-              <div className="flex items-center gap-1.5 text-xs text-[#3ba55c]">
+              <div className="flex items-center gap-1.5 text-xs text-[#3ba55c] mr-1">
                 <span className="w-2 h-2 rounded-full bg-[#3ba55c] inline-block"></span>
-                {online} онлайн
+                <span className="hidden sm:inline">{online} онлайн</span>
               </div>
             )}
             {"Notification" in window && !notifEnabled && (
-              <button onClick={handleEnableNotif} title="Включить уведомления" className="text-[#b9bbbe] hover:text-[#faa81a] transition-colors">
-                <Icon name="BellOff" size={16} />
+              <button onClick={handleEnableNotif} title="Включить уведомления" className="text-[#b9bbbe] hover:text-[#faa81a] transition-colors w-10 h-10 flex items-center justify-center rounded hover:bg-[#40444b]">
+                <Icon name="BellOff" size={20} />
               </button>
             )}
             {"Notification" in window && notifEnabled && (
-              <button onClick={() => setNotifEnabled(false)} title="Уведомления включены" className="text-[#3ba55c] hover:text-[#b9bbbe] transition-colors">
-                <Icon name="Bell" size={16} />
+              <button onClick={() => setNotifEnabled(false)} title="Уведомления включены" className="text-[#3ba55c] hover:text-[#b9bbbe] transition-colors w-10 h-10 flex items-center justify-center rounded hover:bg-[#40444b]">
+                <Icon name="Bell" size={20} />
               </button>
             )}
-            <button onClick={() => setShowUsers(v => !v)} title="Пользователи онлайн" className={`transition-colors ${showUsers ? "text-white" : "text-[#b9bbbe] hover:text-white"}`}>
-              <Icon name="Users" size={16} />
+            <button onClick={() => setShowUsers(v => !v)} title="Пользователи онлайн" className={`w-10 h-10 flex items-center justify-center rounded hover:bg-[#40444b] transition-colors ${showUsers ? "text-white" : "text-[#b9bbbe] hover:text-white"}`}>
+              <Icon name="Users" size={20} />
             </button>
           </div>
         </div>
 
         {/* Messages */}
         <div className="relative flex-1 min-h-0">
-          <div ref={scrollContainerRef} className="h-full overflow-y-auto p-3 space-y-1">
+          <div ref={scrollContainerRef} className="h-full overflow-y-auto p-3 md:p-3 space-y-0.5 md:space-y-1">
             {messages.length === 0 && (
               <div className="text-center text-[#72767d] text-sm py-12">
                 Сообщений пока нет. Будь первым!
