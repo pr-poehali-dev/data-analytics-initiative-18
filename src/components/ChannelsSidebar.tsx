@@ -35,9 +35,10 @@ interface ChannelsSidebarProps {
   onAdminClick?: () => void;
   onDMClick?: () => void;
   onSettingsClick?: () => void;
+  onProfileClick?: (username: string) => void;
 }
 
-const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoomId, onChannelChange, onRoomChange, user, token, onLogout, onAdminClick, onDMClick, onSettingsClick }: ChannelsSidebarProps) => {
+const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoomId, onChannelChange, onRoomChange, user, token, onLogout, onAdminClick, onDMClick, onSettingsClick, onProfileClick }: ChannelsSidebarProps) => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
@@ -316,14 +317,20 @@ const ChannelsSidebar = ({ mobileSidebarOpen, onClose, activeChannel, activeRoom
         <div className="p-2 bg-[#292b2f] flex items-center gap-2 flex-shrink-0">
           {user ? (
             <>
-              <div className={`w-10 h-10 bg-gradient-to-r ${getAvatarColor(user.username)} rounded-full flex items-center justify-center flex-shrink-0`}>
-                <span className="text-white text-base font-semibold">{user.username[0].toUpperCase()}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-white text-base lg:text-sm font-medium truncate">{user.username}</div>
-                {user.favorite_game && <div className="text-[#72767d] text-sm lg:text-xs truncate">{user.favorite_game}</div>}
-              </div>
-              <div className="flex gap-0.5">
+              <button
+                className="flex items-center gap-2 flex-1 min-w-0 hover:bg-[#40444b] rounded-lg p-1 -m-1 transition-colors text-left"
+                onClick={() => onProfileClick?.(user.username)}
+                title="Мой профиль"
+              >
+                <div className={`w-10 h-10 bg-gradient-to-r ${getAvatarColor(user.username)} rounded-full flex items-center justify-center flex-shrink-0`}>
+                  <span className="text-white text-base font-semibold">{user.username[0].toUpperCase()}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white text-base lg:text-sm font-medium truncate">{user.username}</div>
+                  {user.favorite_game && <div className="text-[#72767d] text-sm lg:text-xs truncate">{user.favorite_game}</div>}
+                </div>
+              </button>
+              <div className="flex gap-0.5 flex-shrink-0">
                 {user.is_admin && (
                   <Button variant="ghost" size="sm" className="w-9 h-9 p-0 hover:bg-[#40444b] text-[#faa61a]" onClick={onAdminClick} title="Админ-панель">
                     <span className="text-xs font-bold">A</span>

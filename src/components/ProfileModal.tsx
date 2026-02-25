@@ -9,6 +9,7 @@ interface ProfileData {
   avatar_url: string;
   created_at: string;
   message_count: number;
+  badge?: string;
 }
 
 interface Props {
@@ -18,6 +19,17 @@ interface Props {
   onOpenDM?: (userId: number) => void;
   token?: string | null;
   currentUserId?: number;
+}
+
+interface Achievement {
+  id: string;
+  icon: string;
+  title: string;
+  desc: string;
+  threshold: number;
+  unlocked: boolean;
+  color: string;
+  glow: string;
 }
 
 function avatarBg(name: string) {
@@ -32,6 +44,51 @@ function formatDate(iso: string) {
     day: "numeric", month: "long", year: "numeric",
     timeZone: "Asia/Yekaterinburg"
   });
+}
+
+function getAchievements(messageCount: number): Achievement[] {
+  return [
+    {
+      id: "newbie",
+      icon: "🌱",
+      title: "Новичок",
+      desc: "10 сообщений",
+      threshold: 10,
+      unlocked: messageCount >= 10,
+      color: "#57f287",
+      glow: "shadow-[0_0_12px_#57f28755]",
+    },
+    {
+      id: "got_it",
+      icon: "💡",
+      title: "Разобрался",
+      desc: "100 сообщений",
+      threshold: 100,
+      unlocked: messageCount >= 100,
+      color: "#fee75c",
+      glow: "shadow-[0_0_12px_#fee75c55]",
+    },
+    {
+      id: "pro",
+      icon: "🔥",
+      title: "Прошаренный",
+      desc: "500 сообщений",
+      threshold: 500,
+      unlocked: messageCount >= 500,
+      color: "#ed4245",
+      glow: "shadow-[0_0_12px_#ed424555]",
+    },
+    {
+      id: "legend",
+      icon: "👑",
+      title: "Легенда чатов",
+      desc: "2000 сообщений",
+      threshold: 2000,
+      unlocked: messageCount >= 2000,
+      color: "#faa61a",
+      glow: "shadow-[0_0_16px_#faa61a88]",
+    },
+  ];
 }
 
 export default function ProfileModal({ username, onClose, onSendFriend, onOpenDM, token, currentUserId }: Props) {
@@ -51,15 +108,17 @@ export default function ProfileModal({ username, onClose, onSendFriend, onOpenDM
 
   const isOwnProfile = profile && currentUserId === profile.id;
   const showAvatar = profile?.avatar_url && !avatarError;
+  const achievements = profile ? getAchievements(profile.message_count) : [];
+  const unlockedCount = achievements.filter(a => a.unlocked).length;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="bg-[#36393f] rounded-xl w-full max-w-xs shadow-2xl"
+        className="bg-[#36393f] rounded-xl w-full max-w-xs shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header banner */}
-        <div className="h-20 bg-gradient-to-r from-[#5865f2] to-[#7c3aed] relative rounded-t-xl overflow-hidden flex-shrink-0">
+        <div className="h-20 bg-gradient-to-r from-[#5865f2] to-[#7c3aed] relative flex-shrink-0">
           <button
             onClick={onClose}
             className="absolute top-2 right-2 text-white/70 hover:text-white transition-colors z-10"
@@ -99,8 +158,15 @@ export default function ProfileModal({ username, onClose, onSendFriend, onOpenDM
 
           {profile && (
             <>
-              <div className="mb-4">
-                <h2 className="text-white font-bold text-xl leading-tight">{profile.username}</h2>
+              <div className="mb-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-white font-bold text-xl leading-tight">{profile.username}</h2>
+                  {profile.badge && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-[#5865f2]/20 text-[#5865f2] border border-[#5865f2]/40 leading-none">
+                      {profile.badge}
+                    </span>
+                  )}
+                </div>
                 {profile.favorite_game && (
                   <div className="flex items-center gap-1.5 mt-1">
                     <Icon name="Gamepad2" size={13} className="text-[#5865f2]" />
@@ -118,6 +184,59 @@ export default function ProfileModal({ username, onClose, onSendFriend, onOpenDM
                   <Icon name="MessageSquare" size={13} />
                   <span>{profile.message_count} сообщений</span>
                 </div>
+              </div>
+
+              {/* Achievements */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[#8e9297] text-xs font-semibold uppercase tracking-wide">Достижения</span>
+                  <span className="text-[#72767d] text-xs">{unlockedCount}/{achievements.length}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {achievements.map(a => (
+                    <div key={a.id} className="flex flex-col items-center gap-1" title={`${a.title} — ${a.desc}`}>
+                      <div
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl transition-all ${
+                          a.unlocked
+                            ? `bg-[#2f3136] ${a.glow} border border-white/10`
+                            : "bg-[#2f3136] opacity-25 grayscale"
+                        }`}
+                      >
+                        {a.icon}
+                      </div>
+                      <span
+                        className="text-[9px] font-medium text-center leading-tight"
+                        style={{ color: a.unlocked ? a.color : "#72767d" }}
+                      >
+                        {a.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {/* Progress bar to next achievement */}
+                {(() => {
+                  const next = achievements.find(a => !a.unlocked);
+                  if (!next) return (
+                    <div className="mt-2 text-center text-[10px] text-[#faa61a]">🏆 Все достижения разблокированы!</div>
+                  );
+                  const prev = achievements.slice(0, achievements.indexOf(next));
+                  const prevThreshold = prev.length > 0 ? prev[prev.length - 1].threshold : 0;
+                  const progress = Math.min(((profile.message_count - prevThreshold) / (next.threshold - prevThreshold)) * 100, 100);
+                  return (
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[#72767d] text-[10px]">до «{next.title}»</span>
+                        <span className="text-[#72767d] text-[10px]">{profile.message_count} / {next.threshold}</span>
+                      </div>
+                      <div className="h-1.5 bg-[#2f3136] rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${progress}%`, background: next.color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {!isOwnProfile && token && (

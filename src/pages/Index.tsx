@@ -8,6 +8,7 @@ import LoginModal from "@/components/LoginModal";
 import AdminPanel from "@/components/AdminPanel";
 import DirectMessages from "@/components/DirectMessages";
 import SettingsModal from "@/components/SettingsModal";
+import ProfileModal from "@/components/ProfileModal";
 import { useAuth } from "@/hooks/useAuth";
 import { User } from "@/hooks/useAuth";
 import Icon from "@/components/ui/icon";
@@ -39,6 +40,7 @@ const Index = () => {
   const [showAdmin, setShowAdmin] = useState(false);
   const [showDM, setShowDM] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [profileUsername, setProfileUsername] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeChannel, setActiveChannel] = useState("general");
   const [activeRoomId, setActiveRoomId] = useState<number | undefined>();
@@ -118,6 +120,14 @@ const Index = () => {
           onUpdate={(upd: Partial<User>) => login(token, { ...user, ...upd })}
         />
       )}
+      {profileUsername && (
+        <ProfileModal
+          username={profileUsername}
+          onClose={() => setProfileUsername(null)}
+          token={token}
+          currentUserId={user?.id}
+        />
+      )}
 
       {/* Navbar — только на десктопе */}
       <div className="hidden lg:block">
@@ -161,6 +171,7 @@ const Index = () => {
             onAdminClick={() => setShowAdmin(true)}
             onDMClick={handleOpenDM}
             onSettingsClick={() => setShowSettings(true)}
+            onProfileClick={(username) => setProfileUsername(username)}
           />
           <ChatArea
             onSidebarOpen={() => setMobileSidebarOpen(true)}
@@ -209,10 +220,10 @@ const Index = () => {
 
         {user ? (
           <button
-            onClick={() => setShowSettings(true)}
+            onClick={() => setProfileUsername(user.username)}
             className="flex flex-col items-center gap-1 py-3 px-5 text-[#b9bbbe] active:text-white min-w-[64px] min-h-[60px] justify-center"
           >
-            <Icon name="Settings" size={24} />
+            <Icon name="User" size={24} />
             <span className="text-xs">Профиль</span>
           </button>
         ) : (
