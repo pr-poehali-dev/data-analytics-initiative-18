@@ -16,8 +16,17 @@ const SEEN_KEY = "frikords_dm_seen";
 function getSeenMap(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(SEEN_KEY) || "{}"); } catch { return {}; }
 }
-function setSeenMap(m: Record<string, number>) {
-  localStorage.setItem(SEEN_KEY, JSON.stringify(m));
+
+function requestNotifPermission() {
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+}
+
+function sendNotif(title: string, body: string) {
+  if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+    new Notification(title, { body, icon: "/icons/icon-192.png" });
+  }
 }
 
 const Index = () => {
@@ -44,16 +53,18 @@ const Index = () => {
       const seen = getSeenMap();
       let total = 0;
       await Promise.all(
-        data.friends.map(async (f: { id: number }) => {
+        data.friends.map(async (f: { id: number; username: string }) => {
           const r = await fetch(`${BASE}?action=dm&with=${f.id}`, {
             headers: { "X-Authorization": `Bearer ${token}` },
           });
           const d = await r.json();
           if (!d.messages?.length) return;
-          const lastId: number = d.messages[d.messages.length - 1].id;
           const seenId: number = seen[String(f.id)] || 0;
-          const unread = d.messages.filter((m: { id: number; username: string }) => m.id > seenId && m.username !== user.username).length;
-          total += unread;
+          const newMsgs = d.messages.filter((m: { id: number; username: string }) => m.id > seenId && m.username !== user.username);
+          if (newMsgs.length > 0 && seenId > 0) {
+            sendNotif(`💬 ${f.username}`, newMsgs[newMsgs.length - 1].content.slice(0, 80));
+          }
+          total += newMsgs.length;
         })
       );
       setUnreadCount(total);
@@ -62,6 +73,7 @@ const Index = () => {
 
   useEffect(() => {
     if (!user || !token) { setUnreadCount(0); return; }
+    requestNotifPermission();
     checkUnread();
     pollRef.current = setInterval(checkUnread, 10000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
