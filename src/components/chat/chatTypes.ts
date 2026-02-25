@@ -1,0 +1,63 @@
+export interface Reaction {
+  emoji: string;
+  count: number;
+  users: number[];
+}
+
+export interface Message {
+  id: number;
+  content: string;
+  created_at: string;
+  username: string;
+  favorite_game: string;
+  avatar_url?: string;
+  is_removed?: boolean;
+  author_id?: number;
+  edited?: boolean;
+  reactions?: Reaction[];
+  replyTo?: { id: number; username: string; content: string };
+}
+
+export interface OnlineUser {
+  username: string;
+  favorite_game: string;
+}
+
+export interface ContextMenu {
+  msgId: number;
+  x: number;
+  y: number;
+}
+
+export const CHANNEL_LABELS: Record<string, string> = {
+  general: "общий",
+  meet: "знакомства",
+  memes: "мемы",
+  teammates: "поиск-тиммейтов",
+};
+
+export const EMOJI_LIST = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👎", "🎮"];
+
+export function avatarBg(name: string) {
+  const colors = ["#5865f2","#eb459e","#ed4245","#57f287","#1abc9c","#3498db","#e91e63","#f39c12"];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return colors[Math.abs(h) % colors.length];
+}
+
+export function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Yekaterinburg",
+  });
+}
+
+export function sendNotification(username: string, content: string) {
+  if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+    new Notification(`${username} в Frikords`, {
+      body: content.length > 60 ? content.slice(0, 60) + "…" : content,
+      icon: "/favicon.ico",
+    });
+  }
+}

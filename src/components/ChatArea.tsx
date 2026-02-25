@@ -1,41 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Hash, Menu, Send, X } from "lucide-react";
+import { Hash, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Icon from "@/components/ui/icon";
 import { User } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import ProfileModal from "@/components/ProfileModal";
-
-interface Reaction {
-  emoji: string;
-  count: number;
-  users: number[];
-}
-
-interface Message {
-  id: number;
-  content: string;
-  created_at: string;
-  username: string;
-  favorite_game: string;
-  avatar_url?: string;
-  is_removed?: boolean;
-  author_id?: number;
-  edited?: boolean;
-  reactions?: Reaction[];
-  replyTo?: { id: number; username: string; content: string };
-}
-
-interface OnlineUser {
-  username: string;
-  favorite_game: string;
-}
-
-interface ContextMenu {
-  msgId: number;
-  x: number;
-  y: number;
-}
+import MessageItem from "@/components/chat/MessageItem";
+import OnlinePanel from "@/components/chat/OnlinePanel";
+import MessageInput from "@/components/chat/MessageInput";
+import {
+  Message, OnlineUser, ContextMenu,
+  CHANNEL_LABELS, sendNotification,
+} from "@/components/chat/chatTypes";
 
 interface ChatAreaProps {
   onSidebarOpen: () => void;
@@ -45,39 +21,6 @@ interface ChatAreaProps {
   channel: string;
   roomId?: number;
   roomName?: string;
-}
-
-const CHANNEL_LABELS: Record<string, string> = {
-  general: "общий",
-  meet: "знакомства",
-  memes: "мемы",
-  teammates: "поиск-тиммейтов",
-};
-
-const EMOJI_LIST = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👎", "🎮"];
-
-function avatarBg(name: string) {
-  const colors = ["#5865f2","#eb459e","#ed4245","#57f287","#1abc9c","#3498db","#e91e63","#f39c12"];
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
-  return colors[Math.abs(h) % colors.length];
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Yekaterinburg",
-  });
-}
-
-function sendNotification(username: string, content: string) {
-  if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
-    new Notification(`${username} в Frikords`, {
-      body: content.length > 60 ? content.slice(0, 60) + "…" : content,
-      icon: "/favicon.ico",
-    });
-  }
 }
 
 const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId, roomName }: ChatAreaProps) => {
@@ -304,131 +247,25 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
                 Сообщений пока нет. Будь первым!
               </div>
             )}
-            {messages.map((msg) => {
-              const isOwn = uid === msg.author_id;
-              const isHovered = hoveredMsg === msg.id;
-              return (
-                <div
-                  key={msg.id}
-                  className="relative flex gap-3 hover:bg-[#32353b] rounded px-2 py-1 -mx-2 group"
-                  onMouseEnter={() => setHoveredMsg(msg.id)}
-                  onMouseLeave={() => setHoveredMsg(null)}
-                  onContextMenu={e => handleContextMenu(e, msg)}
-                >
-                  {/* Avatar */}
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer overflow-hidden"
-                    style={{ background: msg.avatar_url ? undefined : avatarBg(msg.username) }}
-                    onClick={() => setProfileUsername(msg.username)}
-                  >
-                    {msg.avatar_url
-                      ? <img src={msg.avatar_url} alt={msg.username} className="w-full h-full object-cover" />
-                      : <span className="text-white text-sm font-semibold">{msg.username[0].toUpperCase()}</span>
-                    }
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2 mb-0.5">
-                      <span
-                        className="text-white font-medium text-sm cursor-pointer hover:underline"
-                        onClick={() => setProfileUsername(msg.username)}
-                      >
-                        {msg.username}
-                      </span>
-                      {msg.favorite_game && !msg.is_removed && <span className="text-[#5865f2] text-xs">🎮 {msg.favorite_game}</span>}
-                      <span className="text-[#72767d] text-xs">{formatTime(msg.created_at)}</span>
-                      {msg.edited && !msg.is_removed && <span className="text-[#72767d] text-xs italic">(изменено)</span>}
-                    </div>
-                    {msg.is_removed ? (
-                      <p className="text-[#72767d] text-sm italic">сообщение удалено</p>
-                    ) : (
-                      <p className="text-[#dcddde] text-sm break-words whitespace-pre-wrap">{msg.content}</p>
-                    )}
-                    {/* Reactions row */}
-                    {!msg.is_removed && (msg.reactions || []).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {(msg.reactions || []).map(r => {
-                          const iMine = user && r.users.includes(uid!);
-                          return (
-                            <button
-                              key={r.emoji}
-                              onClick={e => { e.stopPropagation(); handleReact(msg.id, r.emoji); }}
-                              className={`flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full border transition-colors ${
-                                iMine
-                                  ? "bg-[#5865f2]/20 border-[#5865f2]/60 text-white"
-                                  : "bg-[#2f3136] border-[#40444b] text-[#dcddde] hover:border-[#5865f2]/50"
-                              }`}
-                            >
-                              <span>{r.emoji}</span>
-                              <span className="text-[10px] font-medium">{r.count}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Hover action buttons */}
-                  {!msg.is_removed && user && isHovered && (
-                    <div
-                      className="absolute right-2 top-0 -translate-y-1/2 flex items-center gap-1 bg-[#2f3136] border border-[#202225] rounded-lg shadow-lg px-1 py-0.5 z-10"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => setEmojiPickerFor(v => v === msg.id ? null : msg.id)}
-                        className="text-[#b9bbbe] hover:text-white transition-colors p-1 rounded hover:bg-[#40444b]"
-                        title="Реакция"
-                      >
-                        <Icon name="Smile" size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleReply(msg.id)}
-                        className="text-[#b9bbbe] hover:text-white transition-colors p-1 rounded hover:bg-[#40444b]"
-                        title="Ответить"
-                      >
-                        <Icon name="Reply" size={14} />
-                      </button>
-                      {isOwn && (
-                        <>
-                          <button
-                            onClick={() => handleEdit(msg.id)}
-                            className="text-[#b9bbbe] hover:text-white transition-colors p-1 rounded hover:bg-[#40444b]"
-                            title="Изменить"
-                          >
-                            <Icon name="Pencil" size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(msg.id)}
-                            className="text-[#b9bbbe] hover:text-[#ed4245] transition-colors p-1 rounded hover:bg-[#40444b]"
-                            title="Удалить"
-                          >
-                            <Icon name="Trash2" size={14} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Emoji picker */}
-                  {emojiPickerFor === msg.id && (
-                    <div
-                      className="absolute right-2 top-7 bg-[#2f3136] border border-[#202225] rounded-lg shadow-xl p-2 z-20 flex gap-1"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      {EMOJI_LIST.map(emoji => (
-                        <button
-                          key={emoji}
-                          onClick={() => handleReact(msg.id, emoji)}
-                          className="text-xl hover:scale-125 transition-transform p-0.5 rounded hover:bg-[#40444b]"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {messages.map((msg) => (
+              <MessageItem
+                key={msg.id}
+                msg={msg}
+                uid={uid}
+                user={user}
+                isHovered={hoveredMsg === msg.id}
+                emojiPickerFor={emojiPickerFor}
+                onMouseEnter={() => setHoveredMsg(msg.id)}
+                onMouseLeave={() => setHoveredMsg(null)}
+                onContextMenu={handleContextMenu}
+                onProfileClick={setProfileUsername}
+                onReact={handleReact}
+                onReply={handleReply}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onToggleEmojiPicker={id => setEmojiPickerFor(v => v === id ? null : id)}
+              />
+            ))}
             <div ref={bottomRef} />
           </div>
           {newMsgCount > 0 && (
@@ -441,92 +278,28 @@ const ChatArea = ({ onSidebarOpen, onRegisterClick, user, token, channel, roomId
           )}
         </div>
 
-        {/* Reply / Edit bar */}
-        {(replyTo || editingMsg) && (
-          <div className="mx-3 mb-1 px-3 py-2 bg-[#2f3136] rounded-t-lg border-l-2 border-[#5865f2] flex items-center gap-2">
-            <Icon name={editingMsg ? "Pencil" : "Reply"} size={14} className="text-[#5865f2] flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <span className="text-[#5865f2] text-xs font-medium">
-                {editingMsg ? "Редактирование" : `Ответ для @${replyTo?.username}`}
-              </span>
-              {replyTo && (
-                <p className="text-[#72767d] text-xs truncate">{replyTo.content}</p>
-              )}
-            </div>
-            <button
-              onClick={() => { setReplyTo(null); setEditingMsg(null); setInput(""); }}
-              className="text-[#72767d] hover:text-white flex-shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Input */}
-        <div className="p-3 flex-shrink-0 border-t border-[#202225]">
-          {user ? (
-            <form onSubmit={sendMessage} className="flex gap-2">
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                placeholder={editingMsg ? "Редактировать сообщение..." : `Написать в #${label}...`}
-                disabled={sending}
-                className="flex-1 bg-[#40444b] text-white placeholder-[#72767d] rounded px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-[#5865f2] disabled:opacity-60"
-              />
-              <Button type="submit" disabled={!input.trim() || sending} className="bg-[#5865f2] hover:bg-[#4752c4] text-white px-3 disabled:opacity-40">
-                <Send className="w-4 h-4" />
-              </Button>
-            </form>
-          ) : (
-            <div className="flex items-center justify-between bg-[#40444b] rounded px-3 py-2.5">
-              <span className="text-[#72767d] text-sm">Войди, чтобы писать</span>
-              <Button size="sm" className="bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs" onClick={onRegisterClick}>
-                Войти / зарегистрироваться
-              </Button>
-            </div>
-          )}
-        </div>
+        <MessageInput
+          user={user}
+          input={input}
+          sending={sending}
+          replyTo={replyTo}
+          editingMsg={editingMsg}
+          label={label}
+          inputRef={inputRef}
+          onInputChange={setInput}
+          onSubmit={sendMessage}
+          onCancelReplyOrEdit={() => { setReplyTo(null); setEditingMsg(null); setInput(""); }}
+          onRegisterClick={onRegisterClick}
+        />
       </div>
 
       {/* Users panel */}
       {showUsers && (
-        <div className="w-52 bg-[#2f3136] border-l border-[#202225] flex flex-col flex-shrink-0">
-          <div className="h-12 flex items-center justify-between px-3 border-b border-[#202225]">
-            <span className="text-[#8e9297] text-xs font-semibold uppercase tracking-wide">
-              Онлайн — {onlineUsers.length}
-            </span>
-            <button onClick={() => setShowUsers(false)} className="text-[#72767d] hover:text-white">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto py-2">
-            {onlineUsers.length === 0 && (
-              <p className="text-[#72767d] text-xs text-center mt-4">Никого нет онлайн</p>
-            )}
-            {onlineUsers.map((u) => (
-              <div
-                key={u.username}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-[#36393f] rounded mx-1 cursor-pointer"
-                onClick={() => setProfileUsername(u.username)}
-              >
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: avatarBg(u.username) }}
-                >
-                  <span className="text-white text-xs font-semibold">{u.username[0].toUpperCase()}</span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-white text-xs font-medium truncate">{u.username}</div>
-                  {u.favorite_game && (
-                    <div className="text-[#72767d] text-xs truncate">🎮 {u.favorite_game}</div>
-                  )}
-                </div>
-                <span className="w-2 h-2 rounded-full bg-[#3ba55c] flex-shrink-0 ml-auto"></span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <OnlinePanel
+          onlineUsers={onlineUsers}
+          onClose={() => setShowUsers(false)}
+          onProfileClick={setProfileUsername}
+        />
       )}
 
       {/* Context menu */}
