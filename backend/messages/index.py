@@ -399,7 +399,7 @@ def handler(event: dict, context) -> dict:
         key = f"avatars/{uid}_{int(time.time())}.{ext}"
         s3 = s3_client()
         s3.put_object(Bucket='files', Key=key, Body=img_bytes, ContentType=ct)
-        cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/files/{key}"
+        cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{key}"
         cur.execute(f"UPDATE {schema}.users SET avatar_url='{cdn_url}' WHERE id={uid}")
         return resp(200, {'ok': True, 'avatar_url': cdn_url})
 
